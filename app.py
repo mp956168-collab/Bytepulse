@@ -59,7 +59,7 @@ def formato_cop(valor):
     return f"${valor:,.0f}".replace(",", ".")
 
 # ==========================================
-# 2. SISTEMA DE AUTENTICACIÓN Y RECUPERACIÓN
+# 2. AUTENTICACIÓN Y RECUPERACIÓN DE CLAVE
 # ==========================================
 if st.session_state.usuario_actual is None:
     st.title("Bytepulse 📈")
@@ -85,12 +85,12 @@ if st.session_state.usuario_actual is None:
                     st.error("Usuario o contraseña incorrectos.")
 
         st.write("")
-        # RECUPERACIÓN DE CONTRASEÑA VÍA TELÉFONO COLOMBIANO
+        # RECUPERACIÓN DE CONTRASEÑA EN CASO DE OLVIDO
         with st.expander("📲 ¿Olvidaste tu contraseña? (Recuperar por Teléfono)"):
             with st.form("form_recuperar"):
                 u_recuperar = st.text_input("Ingresa tu Usuario").strip().lower()
-                tel_recuperar = st.text_input("Número de Teléfono Registrado", placeholder="Ej: 3001234567")
-                btn_recuperar = st.form_submit_button("Enviar Contraseña por SMS")
+                tel_recuperar = st.text_input("Número de Teléfono Registrado (Colombia)", placeholder="Ej: 3001234567").strip()
+                btn_recuperar = st.form_submit_button("Enviar Contraseña al Número")
 
                 if btn_recuperar:
                     db = st.session_state.db_usuarios
@@ -98,11 +98,11 @@ if st.session_state.usuario_actual is None:
                         tel_guardado = db[u_recuperar].get("telefono", "")
                         if tel_recuperar == tel_guardado:
                             pass_encontrada = db[u_recuperar]["password"]
-                            st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña para Bytepulse es: `{pass_encontrada}`")
+                            st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
                         else:
                             st.error("El número telefónico no coincide con el registrado para este usuario.")
                     else:
-                        st.error("El usuario ingresado no existe.")
+                        st.error("El usuario ingresado no existe en el sistema.")
 
     with col_reg:
         st.subheader("📝 Registrar Nuevo Cliente")
@@ -118,7 +118,7 @@ if st.session_state.usuario_actual is None:
                 elif user_reg in st.session_state.db_usuarios:
                     st.error("El usuario ya existe. Intenta con otro nombre.")
                 elif not validar_telefono_colombia(tel_reg):
-                    st.error("El número telefónico debe ser un celular colombiano válido de 10 dígitos (debe comenzar por 3, ej: 3001234567).")
+                    st.error("El número telefónico debe ser un celular colombiano de 10 dígitos que empiece por 3 (Ej: 3001234567).")
                 else:
                     st.session_state.db_usuarios[user_reg] = {
                         "password": pass_reg,
@@ -127,12 +127,12 @@ if st.session_state.usuario_actual is None:
                         "metas": []
                     }
                     guardar_datos()
-                    st.success("Cuenta creada con éxito. Ya puedes iniciar sesión.")
+                    st.success("Cuenta creada exitosamente. Ya puedes iniciar sesión.")
 
     st.stop()
 
 # ==========================================
-# 3. PANEL PRINCIPAL Y PESTAÑAS DINÁMICAS
+# 3. PANEL PRINCIPAL Y PESTAÑAS
 # ==========================================
 user = st.session_state.usuario_actual
 datos_user = st.session_state.db_usuarios[user]
@@ -141,7 +141,7 @@ es_admin = (user == "admin")
 col_header, col_logout = st.columns([5, 1])
 with col_header:
     st.title(f"Bytepulse 📈 - Hola, {user.capitalize()}")
-    st.caption("Solución Tecnológica de Gestión Financiera por **Quantumsoft** (Valores en COP)")
+    st.caption("Solución Tecnológica de Gestión Financiera por **Quantumsoft**")
 with col_logout:
     st.write("")
     if st.button("🔒 Cerrar Sesión"):
@@ -150,7 +150,7 @@ with col_logout:
 
 st.divider()
 
-titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro"]
+titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro", "⚙️ Configuración Cuenta"]
 if es_admin:
     titulos_pestañas.append("👑 Control de Administrador")
 
@@ -159,7 +159,8 @@ pestañas = st.tabs(titulos_pestañas)
 tab_dashboard = pestañas[0]
 tab_registro = pestañas[1]
 tab_ahorro = pestañas[2]
-tab_admin = pestañas[3] if es_admin else None
+tab_config = pestañas[3]
+tab_admin = pestañas[4] if es_admin else None
 
 # ==========================================
 # 4. DASHBOARD GENERAL
@@ -204,8 +205,7 @@ with tab_dashboard:
         st.subheader("Distribución Financiera")
         df_gastos = df[df['Tipo'].isin(['Gasto', 'Deuda', 'Ahorro / Inversión'])] if not df.empty else pd.DataFrame()
         if not df_gastos.empty:
-            fig_pie = px.pie(df_gastos, values='Monto', names='Categoría', hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Set2)
+            fig_pie = px.pie(df_gastos, values='Monto', names='Categoría', hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
             st.plotly_chart(fig_pie, use_container_width=True)
         else:
             st.info("No hay datos de gastos ni ahorros registrados.")
@@ -218,7 +218,7 @@ with tab_dashboard:
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO Y GESTIÓN DE TRANSACCIONES
+# 5. REGISTRO Y HISTORIAL DE TRANSACCIONES
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
@@ -275,7 +275,6 @@ with tab_registro:
                         elif tipo in ["Gasto", "Deuda"]:
                             nuevo_saldo = saldo_previo - monto
                             m["Actual"] = nuevo_saldo
-                            
                             porcentaje_retirado = (monto / saldo_previo * 100) if saldo_previo > 0 else 100.0
                             pct_perdidofondo = (monto / monto_objetivo * 100) if monto_objetivo > 0 else 0.0
                             
@@ -316,17 +315,17 @@ with tab_registro:
                 mime="text/csv"
             )
 
-    # BOTÓN PARA ELIMINAR TODAS LAS TRANSACCIONES
+    # BOTÓN PARA ELIMINAR TODAS LAS TRANSACCIONES DEL USUARIO
     with col_hist_del:
         if not df.empty:
             if st.button("🚨 Eliminar TODAS las Transacciones", type="primary"):
                 datos_user["transacciones"] = []
                 guardar_datos()
-                st.success("Se han eliminado todas las transacciones.")
+                st.success("Se borraron todas tus transacciones.")
                 st.rerun()
 
     if not datos_user["transacciones"]:
-        st.info("No hay transacciones guardadas.")
+        st.info("No tienes transacciones guardadas.")
     else:
         for idx, row in enumerate(datos_user["transacciones"]):
             c_fecha, c_tipo, c_cat, c_monto, c_meta, c_del = st.columns([1.5, 1.2, 1.8, 1.5, 2, 1])
@@ -357,7 +356,7 @@ with tab_ahorro:
     capacidad_ahorro = max(0.0, balance)
     cuota_sugerida = capacidad_ahorro * 0.20
     
-    st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible para ahorro/inversión es de **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
+    st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
     with st.form("form_nueva_meta", clear_on_submit=True):
@@ -435,20 +434,49 @@ with tab_ahorro:
             st.divider()
 
 # ==========================================
-# 7. PANEL DE CONTROL DE ADMINISTRADOR
+# 7. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
+# ==========================================
+with tab_config:
+    st.subheader("🔒 Seguridad y Configuración de Cuenta")
+    st.write(f"**Usuario Actual:** `{user}`")
+    st.write(f"**Teléfono Registrado:** `+57 {datos_user.get('telefono', 'Sin registro')}`")
+    st.divider()
+    
+    st.subheader("🔑 Cambiar Contraseña")
+    with st.form("form_cambiar_pass"):
+        old_pass = st.text_input("Contraseña Anterior", type="password")
+        new_pass = st.text_input("Nueva Contraseña", type="password")
+        confirm_pass = st.text_input("Confirmar Nueva Contraseña", type="password")
+        btn_cambiar = st.form_submit_button("Actualizar Contraseña")
+        
+        if btn_cambiar:
+            if not old_pass or not new_pass or not confirm_pass:
+                st.warning("Por favor completa todos los campos de contraseña.")
+            elif old_pass != datos_user["password"]:
+                st.error("La contraseña anterior introducida es incorrecta.")
+            elif new_pass != confirm_pass:
+                st.error("La nueva contraseña y su confirmación no coinciden.")
+            elif new_pass == old_pass:
+                st.warning("La nueva contraseña debe ser distinta a la contraseña actual.")
+            else:
+                datos_user["password"] = new_pass
+                guardar_datos()
+                st.success("¡Tu contraseña ha sido actualizada correctamente!")
+
+# ==========================================
+# 8. PANEL DE ADMINISTRADOR (ELIMINAR CUENTAS)
 # ==========================================
 if es_admin and tab_admin is not None:
     with tab_admin:
-        st.subheader("👑 Panel de Control, Credenciales y Auditoría (Dueño)")
-        st.caption("Visualización de claves de usuarios, teléfonos de contacto, métricas de rendimiento y borrado de cuentas.")
+        st.subheader("👑 Panel de Control de Administrador")
+        st.caption("Inspección de contraseñas, métricas globales y eliminación de cuentas.")
         
         db_global = st.session_state.db_usuarios
         lista_usuarios = list(db_global.keys())
         
-        # MÉTRICAS GLOBALES
+        # METRICAS GLOBALES
         total_usuarios = len(lista_usuarios)
         todas_las_tx = []
-        
         for u, d in db_global.items():
             for tx in d.get("transacciones", []):
                 tx_copy = tx.copy()
@@ -456,7 +484,6 @@ if es_admin and tab_admin is not None:
                 todas_las_tx.append(tx_copy)
 
         df_global_tx = pd.DataFrame(todas_las_tx)
-        
         total_ingresos_global = df_global_tx[df_global_tx['Tipo'] == 'Ingreso']['Monto'].sum() if not df_global_tx.empty else 0.0
         total_gastos_global = df_global_tx[df_global_tx['Tipo'] == 'Gasto']['Monto'].sum() if not df_global_tx.empty else 0.0
         
@@ -468,17 +495,16 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        # TABLA DE CREDENCIALES DE USUARIOS (EL ADMIN PUEDE VER LAS CONTRASEÑAS Y TELÉFONOS)
-        st.subheader("🔑 Directorio y Credenciales de Usuarios")
-        
+        # TABLA DE USUARIOS Y CONTRASEÑAS VISIBLES
+        st.subheader("🔑 Directorio de Cuentas y Credenciales")
         datos_credenciales = []
         for u, d in db_global.items():
             datos_credenciales.append({
                 "Usuario": u,
-                "Contraseña": d.get("password", "N/A"),
+                "Contraseña Actual": d.get("password", "N/A"),
                 "Teléfono Colombia": f"+57 {d.get('telefono', 'Sin registro')}",
-                "Total Transacciones": len(d.get("transacciones", [])),
-                "Total Metas": len(d.get("metas", []))
+                "Transacciones": len(d.get("transacciones", [])),
+                "Metas": len(d.get("metas", []))
             })
             
         df_credenciales = pd.DataFrame(datos_credenciales)
@@ -486,24 +512,23 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        # INSPECCIÓN INDIVIDUAL Y ELIMINACIÓN DE USUARIOS
-        st.subheader("🔍 Inspección y Borrado Individual de Usuarios")
-        
+        # OPCIÓN RESTAURADA DE ELIMINAR USUARIOS
+        st.subheader("🗑️ Gestión y Borrado de Cuentas")
         col_sel, col_del = st.columns([3, 2])
         
         with col_sel:
-            usuario_seleccionado = st.selectbox("Selecciona un usuario para auditar:", lista_usuarios)
+            usuario_seleccionado = st.selectbox("Selecciona un usuario para auditar/eliminar:", lista_usuarios)
             
         with col_del:
             st.write("")
             st.write("")
             if usuario_seleccionado == "admin":
-                st.info("🛡️ La cuenta `admin` no se puede eliminar.")
+                st.info("🛡️ Por seguridad, la cuenta `admin` no se puede eliminar.")
             else:
-                if st.button(f"🗑️ Eliminar Usuario '{usuario_seleccionado}'", type="primary"):
+                if st.button(f"🚨 Eliminar Cuenta de '{usuario_seleccionado}'", type="primary"):
                     del st.session_state.db_usuarios[usuario_seleccionado]
                     guardar_datos()
-                    st.success(f"El usuario `{usuario_seleccionado}` ha sido eliminado.")
+                    st.success(f"La cuenta del usuario `{usuario_seleccionado}` ha sido eliminada permanentemente.")
                     st.rerun()
 
         if usuario_seleccionado:
@@ -511,7 +536,6 @@ if es_admin and tab_admin is not None:
             df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
             metas_sel = datos_sel.get("metas", [])
             
-            # CÁLCULOS DE RENDIMIENTO
             if not df_sel.empty:
                 u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
                 u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (~df_sel['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta']))]['Monto'].sum())
@@ -524,7 +548,7 @@ if es_admin and tab_admin is not None:
             else:
                 u_ingresos, u_gastos, u_deudas, u_fondo_ahorro, u_balance = 0.0, 0.0, 0.0, 0.0, 0.0
 
-            st.markdown(f"#### 📊 Rendimiento Financiero de `{usuario_seleccionado}`")
+            st.markdown(f"#### 📊 Informe de Cuentas: `{usuario_seleccionado}`")
             st.info(f"🔑 **Contraseña:** `{datos_sel.get('password')}` | 📞 **Teléfono:** `+57 {datos_sel.get('telefono', 'N/A')}`")
             
             m1, m2, m3, m4 = st.columns(4)
@@ -532,28 +556,3 @@ if es_admin and tab_admin is not None:
             m2.metric("Gastos Corrientes", formato_cop(u_gastos + u_deudas))
             m3.metric("Fondo de Ahorro", formato_cop(u_fondo_ahorro))
             m4.metric("Balance Libre", formato_cop(u_balance))
-            
-            col_u1, col_u2 = st.columns(2)
-            with col_u1:
-                st.markdown(f"**Transacciones Registradas ({len(df_sel)}):**")
-                if not df_sel.empty:
-                    st.dataframe(df_sel[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Meta_Asociada']], use_container_width=True)
-                else:
-                    st.info("Sin transacciones.")
-                    
-            with col_u2:
-                st.markdown(f"**Metas de Ahorro Activas ({len(metas_sel)}):**")
-                if metas_sel:
-                    df_m_sel = pd.DataFrame(metas_sel)
-                    st.dataframe(df_m_sel[['Meta', 'Objetivo', 'Actual', 'Plazo_Meses']], use_container_width=True)
-                else:
-                    st.info("Sin metas registradas.")
-
-        st.divider()
-        
-        # AUDITORÍA GENERAL DE TRANSACCIONES
-        st.subheader("📋 Registro Global de Transacciones del Sistema")
-        if not df_global_tx.empty:
-            st.dataframe(df_global_tx[['Usuario', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Meta_Asociada', 'Descripción']], use_container_width=True)
-        else:
-            st.info("No hay transacciones registradas por ningún usuario.")

@@ -5,7 +5,6 @@ from datetime import datetime
 import json
 import os
 import random
-import io
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -144,7 +143,7 @@ with tab_dashboard:
         
     egresos_totales = gastos_totales + deudas_totales
     
-    # Balance disponible real descontando ahorros destinados a metas
+    # Balance disponible descontando ahorros acumulados
     balance = ingresos_totales - egresos_totales - ahorros_totales
     
     # ALERTAS DE PRESUPUESTO
@@ -153,7 +152,7 @@ with tab_dashboard:
         if porcentaje_gastado >= 100:
             st.error(f"🚨 **¡Límite Máximo Superado!** Has consumido el **{porcentaje_gastado:.1f}%** de tus ingresos ({formato_cop(egresos_totales)} de {formato_cop(ingresos_totales)}). Procura congelar gastos superfluos.")
         elif porcentaje_gastado >= 80:
-            st.warning(f"⚠️ **Aviso de Límite:** Consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Te quedan **{formato_cop(balance)}** libres para gastar.")
+            st.warning(f"⚠️ **Aviso de Límite:** Consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Te quedan **{formato_cop(balance)}** libres.")
         else:
             st.success(f"✅ **Presupuesto Saludable:** Has utilizado el **{porcentaje_gastado:.1f}%** de tus ingresos. Tienes libre **{formato_cop(balance)}**.")
 
@@ -225,13 +224,13 @@ with tab_registro:
                 if egresos_totales + monto > ingresos_totales:
                     st.warning("⚠️ Este gasto sobrepasa tus ingresos acumulados.")
             
-            # ACTUALIZACIÓN EN TIEMPO REAL DE LAS METAS
+            # ACTUALIZACIÓN DIRECTA EN METAS
             if meta_destino != "Ninguna":
                 for m in datos_user["metas"]:
                     if m["Meta"] == meta_destino:
                         if tipo in ["Ahorro / Inversión", "Ingreso"]:
                             m["Actual"] = float(m.get("Actual", 0.0)) + monto
-                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en la meta '{meta_destino}'!")
+                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en '{meta_destino}'!")
                         elif tipo in ["Gasto", "Deuda"]:
                             m["Actual"] = max(0.0, float(m.get("Actual", 0.0)) - monto)
                             st.warning(f"🔻 Se descontaron {formato_cop(monto)} de la meta '{meta_destino}'.")
@@ -247,16 +246,14 @@ with tab_registro:
         
     with col_hist_export:
         if not df.empty:
-            # Exportador a Excel
-            buffer_excel = io.BytesIO()
-            with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Transacciones')
+            # Generador CSV compatible con Excel
+            csv_data = df.to_csv(index=False).encode('utf-8-sig')
             
             st.download_button(
-                label="📥 Descargar Reporte Excel (.xlsx)",
-                data=buffer_excel.getvalue(),
-                file_name=f"Reporte_Financiero_{user}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 Descargar Reporte (Excel / CSV)",
+                data=csv_data,
+                file_name=f"Reporte_Financiero_{user}.csv",
+                mime="text/csv"
             )
 
     if not datos_user["transacciones"]:
@@ -313,7 +310,6 @@ with tab_ahorro:
                 "Plazo_Meses": int(plazo_meses)
             })
             
-            # Si incluye un monto inicial, registrarlo como movimiento de Ahorro
             if monto_inicial > 0:
                 datos_user["transacciones"].append({
                     "Fecha": str(datetime.now().date()),

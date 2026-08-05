@@ -31,13 +31,8 @@ def cargar_datos():
     return {
         "admin": {
             "password": "123",
-            "transacciones": [
-                {"Fecha": "2026-08-01", "Tipo": "Ingreso", "Categoría": "Nómina", "Monto": 3500000.0, "Descripción": "Sueldo mensual", "Meta_Asociada": "Ninguna"},
-                {"Fecha": "2026-08-02", "Tipo": "Gasto", "Categoría": "Alquiler", "Monto": 1200000.0, "Descripción": "Pago de arriendo", "Meta_Asociada": "Ninguna"}
-            ],
-            "metas": [
-                {"Meta": "Fondo de Emergencia", "Objetivo": 5000000.0, "Actual": 1500000.0, "Plazo_Meses": 6}
-            ]
+            "transacciones": [],
+            "metas": []
         }
     }
 
@@ -106,10 +101,11 @@ if st.session_state.usuario_actual is None:
     st.stop()
 
 # ==========================================
-# 3. PANEL PRINCIPAL
+# 3. PANEL PRINCIPAL Y PESTAÑAS DINÁMICAS
 # ==========================================
 user = st.session_state.usuario_actual
 datos_user = st.session_state.db_usuarios[user]
+es_admin = (user == "admin")
 
 col_header, col_logout = st.columns([5, 1])
 with col_header:
@@ -123,11 +119,16 @@ with col_logout:
 
 st.divider()
 
-tab_dashboard, tab_registro, tab_ahorro = st.tabs([
-    "📊 Dashboard General", 
-    "📝 Registrar Transacción", 
-    "🎯 Planes de Ahorro"
-])
+titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro"]
+if es_admin:
+    titulos_pestañas.append("👑 Control de Administrador")
+
+pestañas = st.tabs(titulos_pestañas)
+
+tab_dashboard = pestañas[0]
+tab_registro = pestañas[1]
+tab_ahorro = pestañas[2]
+tab_admin = pestañas[3] if es_admin else None
 
 # ==========================================
 # 4. DASHBOARD GENERAL
@@ -137,30 +138,33 @@ df = pd.DataFrame(datos_user["transacciones"])
 with tab_dashboard:
     if not df.empty:
         ingresos_totales = float(df[df['Tipo'] == 'Ingreso']['Monto'].sum())
-        gastos_totales = float(df[df['Tipo'] == 'Gasto']['Monto'].sum())
+        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (~df['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta']))]['Monto'].sum())
         deudas_totales = float(df[df['Tipo'] == 'Deuda']['Monto'].sum())
         ahorros_totales = float(df[df['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
-    else:
-        ingresos_totales, gastos_totales, deudas_totales, ahorros_totales = 0.0, 0.0, 0.0, 0.0
+        gastos_de_ahorros = float(df[df['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta'])]['Monto'].sum())
         
-    egresos_totales = gastos_totales + deudas_totales
-    balance = ingresos_totales - egresos_totales - ahorros_totales
+        fondo_ahorro_neto = max(0.0, ahorros_totales - gastos_de_ahorros)
+        gastos_totales_visibles = gastos_ordinarios + gastos_de_ahorros
+    else:
+        ingresos_totales, gastos_ordinarios, deudas_totales, ahorros_totales, gastos_de_ahorros, fondo_ahorro_neto, gastos_totales_visibles = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
+    egresos_corrientes = gastos_ordinarios + deudas_totales
+    balance = ingresos_totales - egresos_corrientes - fondo_ahorro_neto
     
-    # ALERTAS DE PRESUPUESTO
     if ingresos_totales > 0:
-        porcentaje_gastado = (egresos_totales / ingresos_totales) * 100
+        porcentaje_gastado = (egresos_corrientes / ingresos_totales) * 100
         if porcentaje_gastado >= 100:
-            st.error(f"🚨 **¡Límite Máximo Superado!** Has consumido el **{porcentaje_gastado:.1f}%** de tus ingresos ({formato_cop(egresos_totales)} de {formato_cop(ingresos_totales)}). Procura congelar gastos superfluos.")
+            st.error(f"🚨 **¡Límite Máximo Superado!** Has consumido el **{porcentaje_gastado:.1f}%** de tus ingresos libres.")
         elif porcentaje_gastado >= 80:
-            st.warning(f"⚠️ **Aviso de Límite:** Consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Te quedan **{formato_cop(balance)}** libres.")
+            st.warning(f"⚠️ **Aviso de Límite:** Consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Saldo libre: **{formato_cop(balance)}**.")
         else:
             st.success(f"✅ **Presupuesto Saludable:** Has utilizado el **{porcentaje_gastado:.1f}%** de tus ingresos. Tienes libre **{formato_cop(balance)}**.")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Balance Libre Disponible", formato_cop(balance))
     col2.metric("Ingresos Totales", formato_cop(ingresos_totales))
-    col3.metric("Gastos Totales", formato_cop(gastos_totales), delta_color="inverse")
-    col4.metric("Fondo de Ahorros / Metas", formato_cop(ahorros_totales))
+    col3.metric("Gastos Totales", formato_cop(gastos_totales_visibles), delta_color="inverse")
+    col4.metric("Fondo Neto Ahorrado", formato_cop(fondo_ahorro_neto))
     
     st.divider()
     
@@ -183,7 +187,7 @@ with tab_dashboard:
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO DE TRANSACCIONES Y ALERTA DE RIESGO
+# 5. REGISTRO DE TRANSACCIONES
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
@@ -199,7 +203,18 @@ with tab_registro:
             fecha = st.date_input("Fecha de la Transacción", datetime.now())
             
         with col_b:
-            categoria = st.selectbox("Categoría", ["Uso Fondo Meta", "Ahorro Meta", "Nómina", "Alquiler", "Alimentación", "Servicios", "Transporte", "Tarjeta Crédito", "Otros"])
+            categoria = st.selectbox("Categoría", [
+                "Gasto de Inversión / Retiro de Ahorro", 
+                "Uso Fondo Meta", 
+                "Ahorro Meta", 
+                "Nómina", 
+                "Alquiler", 
+                "Alimentación", 
+                "Servicios", 
+                "Transporte", 
+                "Tarjeta Crédito", 
+                "Otros"
+            ])
             meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
             descripcion = st.text_input("Descripción (Opcional)")
             
@@ -216,37 +231,41 @@ with tab_registro:
             }
             datos_user["transacciones"].append(nueva_tx)
             
-            # ACTUALIZACIÓN EN TIEMPO REAL CON ALERTA DE METAS EN RIESGO
             if meta_destino != "Ninguna":
                 for m in datos_user["metas"]:
                     if m["Meta"] == meta_destino:
                         saldo_previo = float(m.get("Actual", 0.0))
+                        monto_objetivo = float(m.get("Objetivo", 1.0))
                         
                         if tipo in ["Ahorro / Inversión", "Ingreso"]:
                             m["Actual"] = saldo_previo + monto
-                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en la meta '{meta_destino}'!")
+                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en '{meta_destino}'!")
+                        
                         elif tipo in ["Gasto", "Deuda"]:
-                            # Permite valores negativos si se gasta más de lo acumulado
-                            m["Actual"] = saldo_previo - monto
+                            nuevo_saldo = saldo_previo - monto
+                            m["Actual"] = nuevo_saldo
                             
-                            # Si se sobrepasa el acumulado, se activa la alerta de riesgo
-                            if m["Actual"] < 0:
+                            porcentaje_retirado = (monto / saldo_previo * 100) if saldo_previo > 0 else 100.0
+                            pct_perdidofondo = (monto / monto_objetivo * 100) if monto_objetivo > 0 else 0.0
+                            
+                            if nuevo_saldo < 0:
                                 st.error(
                                     f"🚨 **¡ALERTA: META EN RIESGO!**\n\n"
-                                    f"Has registrado un gasto de **{formato_cop(monto)}** asociado a la meta **'{meta_destino}'** "
-                                    f"que supera su fondo acumulado previo (**{formato_cop(saldo_previo)}**).\n\n"
-                                    f"⚠️ La meta ha entrado en un **déficit negativo de {formato_cop(m['Actual'])}**."
+                                    f"Has retirado **{formato_cop(monto)}** de **'{meta_destino}'**.\n\n"
+                                    f"⚠️ Consumiste el **{porcentaje_retirado:.1f}%** del saldo acumulado "
+                                    f"y perdiste un **{pct_perdidofondo:.1f}%** de la meta global.\n\n"
+                                    f"📉 Déficit en la meta: **{formato_cop(nuevo_saldo)}**."
                                 )
                             else:
-                                st.warning(f"🔻 Se retiran {formato_cop(monto)} de la meta '{meta_destino}'. Saldo restante: {formato_cop(m['Actual'])}.")
+                                st.warning(
+                                    f"⚠️ **Aviso de Retiro:** Se retiraron **{formato_cop(monto)}** de **'{meta_destino}'** "
+                                    f"(pérdida del **{pct_perdidofondo:.1f}%** del objetivo global). Quedan: **{formato_cop(nuevo_saldo)}**."
+                                )
 
-            # NOTIFICACIONES GENERALES
             elif tipo == "Ingreso":
                 st.balloons()
                 st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Saldo disponible estimado: **{formato_cop(balance + monto)}**.")
-            elif tipo in ["Gasto", "Deuda"] and (egresos_totales + monto > ingresos_totales):
-                st.warning("⚠️ Este gasto sobrepasa tus ingresos acumulados.")
-
+            
             guardar_datos()
             st.rerun()
 
@@ -270,7 +289,7 @@ with tab_registro:
         st.info("No hay transacciones guardadas.")
     else:
         for idx, row in enumerate(datos_user["transacciones"]):
-            c_fecha, c_tipo, c_cat, c_monto, c_meta, c_del = st.columns([1.5, 1.2, 1.5, 1.5, 2, 1])
+            c_fecha, c_tipo, c_cat, c_monto, c_meta, c_del = st.columns([1.5, 1.2, 1.8, 1.5, 2, 1])
             c_fecha.write(row['Fecha'])
             c_tipo.write(f"**{row['Tipo']}**")
             c_cat.write(row['Categoría'])
@@ -290,7 +309,7 @@ with tab_registro:
                 st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO CON METAS EN RIESGO
+# 6. PLANES DE AHORRO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -348,20 +367,17 @@ with tab_ahorro:
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
-            
-            # Cálculo del porcentaje de cumplimiento (permite valores negativos)
             porcentaje_real = (monto_actual / monto_objetivo) * 100 if monto_objetivo > 0 else 0.0
             
             st.markdown(f"### 🎯 {meta['Meta']}")
             
-            # CONTROL VISUAL DE METAS EN RIESGO / NÚMEROS NEGATIVOS
             if monto_actual < 0:
                 st.error(
-                    f"⚠️ **ESTADO: META EN RIESGO Y FONDOS EN NEGATIVO**\n\n"
-                    f"**Acumulado Actual:** `{formato_cop(monto_actual)}` de `{formato_cop(monto_objetivo)}` (**{porcentaje_real:.1f}%**)\n\n"
-                    f"🚨 Has retirado más dinero del disponible en este plan. Cubre el saldo negativo para retomar el avance."
+                    f"🚨 **ESTADO: META EN RIESGO Y FONDOS EN DÉFICIT**\n\n"
+                    f"**Saldo Actual:** `{formato_cop(monto_actual)}` de `{formato_cop(monto_objetivo)}` (**{porcentaje_real:.1f}%**)\n\n"
+                    f"⚠️ Has sobrepasado el fondo de este plan. Repón los fondos para continuar."
                 )
-                st.progress(0.0) # Barra en cero para reflejar el déficit
+                st.progress(0.0)
             else:
                 porcentaje_bar = min(max(monto_actual / monto_objetivo, 0.0), 1.0)
                 st.write(f"**Progreso:** {formato_cop(monto_actual)} de {formato_cop(monto_objetivo)} (**{porcentaje_real:.1f}%**)")
@@ -377,3 +393,118 @@ with tab_ahorro:
                 st.rerun()
                 
             st.divider()
+
+# ==========================================
+# 7. PANEL DE ADMINISTRADOR: MONITOREO Y ELIMINACIÓN
+# ==========================================
+if es_admin and tab_admin is not None:
+    with tab_admin:
+        st.subheader("👑 Panel de Control, Gestión de Usuarios y Auditoría (Dueño)")
+        st.caption("Administración total de cuentas, monitoreo de rendimiento financiero y eliminación de usuarios.")
+        
+        db_global = st.session_state.db_usuarios
+        lista_usuarios = list(db_global.keys())
+        
+        # MÉTRICAS GLOBALES DEL SISTEMA
+        total_usuarios = len(lista_usuarios)
+        todas_las_tx = []
+        
+        for u, d in db_global.items():
+            for tx in d.get("transacciones", []):
+                tx_copy = tx.copy()
+                tx_copy["Usuario"] = u
+                todas_las_tx.append(tx_copy)
+
+        df_global_tx = pd.DataFrame(todas_las_tx)
+        
+        total_ingresos_global = df_global_tx[df_global_tx['Tipo'] == 'Ingreso']['Monto'].sum() if not df_global_tx.empty else 0.0
+        total_gastos_global = df_global_tx[df_global_tx['Tipo'] == 'Gasto']['Monto'].sum() if not df_global_tx.empty else 0.0
+        
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("Clientes Registrados", total_usuarios)
+        a2.metric("Movimientos Totales", len(todas_las_tx))
+        a3.metric("Ingresos Globales", formato_cop(total_ingresos_global))
+        a4.metric("Gastos Globales", formato_cop(total_gastos_global))
+        
+        st.divider()
+        
+        # INSPECCIÓN Y ELIMINACIÓN DE USUARIOS
+        st.subheader("🔍 Inspección de Cliente y Eliminación de Cuenta")
+        
+        col_sel, col_del = st.columns([3, 2])
+        
+        with col_sel:
+            usuario_seleccionado = st.selectbox("Selecciona un usuario para auditar:", lista_usuarios)
+            
+        with col_del:
+            st.write("")
+            st.write("")
+            if usuario_seleccionado == "admin":
+                st.info("🛡️ La cuenta `admin` no se puede eliminar.")
+            else:
+                if st.button(f"🗑️ Eliminar Usuario '{usuario_seleccionado}'", type="primary"):
+                    del st.session_state.db_usuarios[usuario_seleccionado]
+                    guardar_datos()
+                    st.success(f"El usuario `{usuario_seleccionado}` ha sido eliminado con éxito.")
+                    st.rerun()
+
+        if usuario_seleccionado:
+            datos_sel = db_global[usuario_seleccionado]
+            df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
+            metas_sel = datos_sel.get("metas", [])
+            
+            # CÁLCULOS EN TIEMPO REAL DE FUNCIONAMIENTO DEL USUARIO
+            if not df_sel.empty:
+                u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
+                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (~df_sel['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta']))]['Monto'].sum())
+                u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
+                u_ahorros = float(df_sel[df_sel['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
+                u_gastos_ahorros = float(df_sel[df_sel['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta'])]['Monto'].sum())
+                
+                u_fondo_ahorro = max(0.0, u_ahorros - u_gastos_ahorros)
+                u_balance = u_ingresos - (u_gastos + u_deudas) - u_fondo_ahorro
+            else:
+                u_ingresos, u_gastos, u_deudas, u_fondo_ahorro, u_balance = 0.0, 0.0, 0.0, 0.0, 0.0
+
+            st.markdown(f"#### 📊 Rendimiento Financiero de `{usuario_seleccionado}`")
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Ingresos", formato_cop(u_ingresos))
+            m2.metric("Gastos Corrientes", formato_cop(u_gastos + u_deudas))
+            m3.metric("Fondo de Ahorro", formato_cop(u_fondo_ahorro))
+            m4.metric("Balance Libre", formato_cop(u_balance))
+            
+            # DIAGNÓSTICO DEL RIESGO
+            if u_ingresos > 0:
+                pct = ((u_gastos + u_deudas) / u_ingresos) * 100
+                if pct >= 100:
+                    st.error(f"🚨 **Estado Crítico:** El usuario consumió el **{pct:.1f}%** de sus ingresos. Se encuentra en sobreendeudamiento o déficit.")
+                elif pct >= 80:
+                    st.warning(f"⚠️ **Estado de Alerta:** El usuario gastó el **{pct:.1f}%** de sus ingresos.")
+                else:
+                    st.success(f"✅ **Estado Saludable:** El usuario gasta solo el **{pct:.1f}%** de sus ingresos.")
+
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                st.markdown(f"**Transacciones Registradas ({len(df_sel)}):**")
+                if not df_sel.empty:
+                    st.dataframe(df_sel[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Meta_Asociada']], use_container_width=True)
+                else:
+                    st.info("Sin transacciones.")
+                    
+            with col_u2:
+                st.markdown(f"**Metas de Ahorro Activas ({len(metas_sel)}):**")
+                if metas_sel:
+                    df_m_sel = pd.DataFrame(metas_sel)
+                    st.dataframe(df_m_sel[['Meta', 'Objetivo', 'Actual', 'Plazo_Meses']], use_container_width=True)
+                else:
+                    st.info("Sin metas registradas.")
+
+        st.divider()
+        
+        # REGISTRO GLOBAL DE AUDITORÍA
+        st.subheader("📋 Registro Global de Transacciones del Sistema")
+        if not df_global_tx.empty:
+            st.dataframe(df_global_tx[['Usuario', 'Fecha', 'Tipo', 'Categoría', 'Monto', 'Meta_Asociada', 'Descripción']], use_container_width=True)
+        else:
+            st.info("No hay transacciones registradas por ningún usuario.")

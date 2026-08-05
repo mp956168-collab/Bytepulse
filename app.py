@@ -128,7 +128,7 @@ tab_dashboard, tab_registro, tab_ahorro = st.tabs([
 ])
 
 # ==========================================
-# 4. DASHBOARD GENERAL CON NOTIFICACIONES INTELIGENTES
+# 4. DASHBOARD GENERAL
 # ==========================================
 df = pd.DataFrame(datos_user["transacciones"])
 
@@ -144,16 +144,16 @@ with tab_dashboard:
     egresos_totales = gastos_totales + deudas_totales
     balance = ingresos_totales - egresos_totales - ahorros_totales
     
-    # 🚨 NOTIFICACIONES DE LÍMITES DE GASTOS
+    # ALERTAS DE PRESUPUESTO Y GASTOS
     if ingresos_totales > 0:
         porcentaje_gastado = (egresos_totales / ingresos_totales) * 100
         
         if porcentaje_gastado >= 100:
-            st.error(f"🚨 **¡Límite Máximo Superado!** Has gastado el **{porcentaje_gastado:.1f}%** de tus ingresos ({formato_cop(egresos_totales)} de {formato_cop(ingresos_totales)}). Detén los gastos no esenciales para evitar endeudamiento.")
+            st.error(f"🚨 **¡Límite Máximo Superado!** Has consumido el **{porcentaje_gastado:.1f}%** de tus ingresos ({formato_cop(egresos_totales)} de {formato_cop(ingresos_totales)}). Evita realizar más gastos.")
         elif porcentaje_gastado >= 80:
-            st.warning(f"⚠️ **¡Cuidado con el límite de gastos!** Ya consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Te quedan **{formato_cop(balance)}** disponibles para mantener tus metas a salvo.")
+            st.warning(f"⚠️ **Aviso de Límite:** Consumiste el **{porcentaje_gastado:.1f}%** de tus ingresos. Te restan **{formato_cop(balance)}** disponibles.")
         else:
-            st.success(f"✅ **Presupuesto Saludable:** Has consumido el **{porcentaje_gastado:.1f}%** de tus ingresos. Tienes disponible un máximo de **{formato_cop(balance)}** para gastar o invertir.")
+            st.success(f"✅ **Presupuesto Saludable:** Has utilizado el **{porcentaje_gastado:.1f}%** de tus ingresos. Tienes libre **{formato_cop(balance)}**.")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Balance Disponible", formato_cop(balance))
@@ -165,24 +165,24 @@ with tab_dashboard:
     
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("Distribución de Gastos, Deudas y Ahorros")
+        st.subheader("Distribución Financiera")
         df_gastos = df[df['Tipo'].isin(['Gasto', 'Deuda', 'Ahorro / Inversión'])] if not df.empty else pd.DataFrame()
         if not df_gastos.empty:
             fig_pie = px.pie(df_gastos, values='Monto', names='Categoría', hole=0.4,
                              color_discrete_sequence=px.colors.qualitative.Set2)
             st.plotly_chart(fig_pie, use_container_width=True)
         else:
-            st.info("No hay datos de gastos ni ahorros registrados.")
+            st.info("No hay datos de gastos registrados.")
             
     with c2:
-        st.subheader("Flujo Financiero")
+        st.subheader("Flujo de Movimientos")
         if not df.empty:
             fig_bar = px.bar(df, x='Fecha', y='Monto', color='Tipo', barmode='group',
                              color_discrete_map={'Ingreso': '#2ecc71', 'Gasto': '#e74c3c', 'Deuda': '#f39c12', 'Ahorro / Inversión': '#3498db'})
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO DE TRANSACCIONES E INTERACCIÓN
+# 5. REGISTRO DE TRANSACCIONES
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
@@ -215,25 +215,24 @@ with tab_registro:
             }
             datos_user["transacciones"].append(nueva_tx)
             
-            # 🌟 MENSAJES MOTIVACIONALES Y AVISOS SEGÚN TIPO DE MOVIMIENTO
+            # NOTIFICACIONES AL REGISTRAR
             if tipo == "Ingreso":
-                msg = random.choice(MENSAJES_MOTIVACIONALES)
                 st.balloons()
-                st.success(f"{msg}\n\n💡 **Recordatorio:** Tienes disponible un margen para gasto/ahorro estimado de **{formato_cop(balance + monto)}**.")
+                st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Margen libre estimado: **{formato_cop(balance + monto)}**.")
             elif tipo in ["Gasto", "Deuda"]:
                 if egresos_totales + monto > ingresos_totales:
-                    st.warning(f"⚠️ **Aviso de Límite:** Este movimiento hace que tus gastos superen tus ingresos totales. Procura limitar compras innecesarias.")
+                    st.warning("⚠️ Este gasto supera tus ingresos totales disponibles.")
             
-            # Actualización en tiempo real del progreso de las metas
+            # ACTUALIZACIÓN DIRECTA DE LA META
             if meta_destino != "Ninguna":
                 for m in datos_user["metas"]:
                     if m["Meta"] == meta_destino:
                         if tipo == "Ahorro / Inversión":
                             m["Actual"] += monto
-                            st.info(f"🎉 ¡Abono guardado! Se sumaron {formato_cop(monto)} a la meta '{meta_destino}'.")
+                            st.info(f"🎉 Se abonaron {formato_cop(monto)} a la meta '{meta_destino}'.")
                         elif tipo in ["Gasto", "Deuda"]:
                             m["Actual"] = max(0.0, m["Actual"] - monto)
-                            st.warning(f"🔻 Se descontaron {formato_cop(monto)} de la meta '{meta_destino}'. ¡Evita retirar fondos a menos que sea una emergencia!")
+                            st.warning(f"🔻 Se restaron {formato_cop(monto)} de la meta '{meta_destino}'.")
 
             guardar_datos()
             st.rerun()
@@ -242,15 +241,8 @@ with tab_registro:
     st.subheader("Historial de Transacciones")
     
     if not datos_user["transacciones"]:
-        st.info("No hay transacciones en el historial.")
+        st.info("No hay transacciones registradas.")
     else:
-        col_hist_header, col_hist_btn = st.columns([4, 1])
-        with col_hist_btn:
-            if st.button("🚨 Vaciar Todo el Historial"):
-                datos_user["transacciones"] = []
-                guardar_datos()
-                st.rerun()
-
         for idx, row in enumerate(datos_user["transacciones"]):
             c_fecha, c_tipo, c_cat, c_monto, c_meta, c_del = st.columns([1.5, 1.2, 1.5, 1.5, 2, 1])
             c_fecha.write(row['Fecha'])
@@ -272,27 +264,27 @@ with tab_registro:
                 st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO Y RECOMENDACIONES
+# 6. PLANES DE AHORRO Y ESTRUCTURA DE METAS
 # ==========================================
 with tab_ahorro:
-    st.subheader("Planes de Ahorro y Recomendaciones Inteligentes")
+    st.subheader("Planes de Ahorro e Inteligencia Financiera")
     
-    capacidad_ahorro = balance
-    cuota_sugerida = capacidad_ahorro * 0.20 if capacidad_ahorro > 0 else 0
+    capacidad_ahorro = max(0.0, balance)
+    cuota_sugerida = capacidad_ahorro * 0.20
     
-    st.info(f"💡 **Recomendación Bytepulse:** Tu capacidad actual de ahorro libre es de **{formato_cop(capacidad_ahorro)}**. Te sugerimos destinar al menos **{formato_cop(cuota_sugerida)}** mensuales a tus metas.")
+    st.info(f"💡 **Recomendación Bytepulse:** Tu capacidad de ahorro disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos ahorrar al menos **{formato_cop(cuota_sugerida)}** al mes.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
     with st.form("form_nueva_meta", clear_on_submit=True):
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Fondo de Emergencia")
+            nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
             monto_meta = st.number_input("Monto Objetivo (COP $)", min_value=100000.0, step=100000.0, format="%.0f")
         with col_m2:
             plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
             monto_inicial = st.number_input("Ahorro Inicial (COP $)", min_value=0.0, step=50000.0, format="%.0f")
         
-        btn_crear_meta = st.form_submit_button("Generar Plan de Ahorro")
+        btn_crear_meta = st.form_submit_button("Guardar Meta de Ahorro")
         
         if btn_crear_meta:
             datos_user["metas"].append({
@@ -302,8 +294,8 @@ with tab_ahorro:
                 "Plazo_Meses": plazo_meses
             })
             guardar_datos()
-            cuota_mes = (monto_meta - monto_inicial) / plazo_meses if plazo_meses > 0 else 0
-            st.success(f"¡Plan generado! Para alcanzar '{nombre_meta}' debes ahorrar **{formato_cop(cuota_mes)}/mes** durante {plazo_meses} meses.")
+            cuota_mes = max(0.0, monto_meta - monto_inicial) / plazo_meses
+            st.success(f"¡Meta creada! Debes ahorrar **{formato_cop(cuota_mes)}/mes** durante {plazo_meses} meses.")
             st.rerun()
 
     st.divider()
@@ -313,24 +305,21 @@ with tab_ahorro:
         st.info("No tienes metas registradas actualmente.")
     else:
         for idx, meta in enumerate(datos_user["metas"]):
-            col_info, col_btn = st.columns([5, 1])
-            
             monto_faltante = max(0.0, meta["Objetivo"] - meta["Actual"])
-            cuota_mensual = monto_faltante / meta["Plazo_Meses"] if meta["Plazo_Meses"] > 0 else 0
+            cuota_mensual = monto_faltante / meta["Plazo_Meses"] if meta.get("Plazo_Meses", 1) > 0 else 0
             porcentaje = min(meta["Actual"] / meta["Objetivo"], 1.0) if meta["Objetivo"] > 0 else 0
             
-            with col_info:
-                st.markdown(f"### 🎯 {meta['Meta']}")
-                st.write(f"**Progreso:** {formato_cop(meta['Actual'])} de {formato_cop(meta['Objetivo'])} ({porcentaje*100:.1f}%)")
-                st.progress(porcentaje)
+            st.markdown(f"### 🎯 {meta['Meta']}")
+            st.write(f"**Progreso:** {formato_cop(meta['Actual'])} de {formato_cop(meta['Objetivo'])} ({porcentaje*100:.1f}%)")
+            st.progress(porcentaje)
+            
+            col_m_details1, col_m_details2, col_m_btn = st.columns([3, 3, 1])
+            col_m_details1.caption(f"📅 **Plazo proyectado:** {meta.get('Plazo_Meses', 6)} meses")
+            col_m_details2.caption(f"📌 **Plan Mensual Sugerido:** {formato_cop(cuota_mensual)} / mes")
+            
+            if col_m_btn.button("🗑️ Eliminar", key=f"btn_del_meta_{idx}"):
+                datos_user["metas"].pop(idx)
+                guardar_datos()
+                st.rerun()
                 
-                col_m_details1, col_m_details2 = st.columns(2)
-                col_m_details1.caption(f"📅 **Plazo restante estimado:** {meta['Plazo_Meses']} meses")
-                col_m_details2.caption(f"📌 **Cuota Mensual Sugerida:** {formato_cop(cuota_mensual)} / mes")
-                st.divider()
-                
-            with col_btn:
-                if st.button("🗑️ Eliminar", key=f"btn_del_meta_{idx}"):
-                    datos_user["metas"].pop(idx)
-                    guardar_datos()
-                    st.rerun()
+            st.divider()

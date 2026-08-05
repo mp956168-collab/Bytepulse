@@ -43,7 +43,6 @@ def guardar_datos():
         json.dump(st.session_state.db_usuarios, f, indent=4)
 
 def validar_telefono_colombia(telefono):
-    # Valida formato celular colombiano: 10 dígitos iniciando por 3
     patron = r"^3\d{9}$"
     return bool(re.match(patron, telefono))
 
@@ -85,7 +84,6 @@ if st.session_state.usuario_actual is None:
                     st.error("Usuario o contraseña incorrectos.")
 
         st.write("")
-        # RECUPERACIÓN DE CONTRASEÑA EN CASO DE OLVIDO
         with st.expander("📲 ¿Olvidaste tu contraseña? (Recuperar por Teléfono)"):
             with st.form("form_recuperar"):
                 u_recuperar = st.text_input("Ingresa tu Usuario").strip().lower()
@@ -170,10 +168,10 @@ df = pd.DataFrame(datos_user["transacciones"])
 with tab_dashboard:
     if not df.empty:
         ingresos_totales = float(df[df['Tipo'] == 'Ingreso']['Monto'].sum())
-        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (~df['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta']))]['Monto'].sum())
+        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (df['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
         deudas_totales = float(df[df['Tipo'] == 'Deuda']['Monto'].sum())
         ahorros_totales = float(df[df['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
-        gastos_de_ahorros = float(df[df['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta'])]['Monto'].sum())
+        gastos_de_ahorros = float(df[df['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
         
         fondo_ahorro_neto = max(0.0, ahorros_totales - gastos_de_ahorros)
         gastos_totales_visibles = gastos_ordinarios + gastos_de_ahorros
@@ -235,7 +233,6 @@ with tab_registro:
             
         with col_b:
             categoria = st.selectbox("Categoría", [
-                "Gasto de Inversión / Retiro de Ahorro", 
                 "Uso Fondo Meta", 
                 "Ahorro Meta", 
                 "Nómina", 
@@ -315,7 +312,6 @@ with tab_registro:
                 mime="text/csv"
             )
 
-    # BOTÓN PARA ELIMINAR TODAS LAS TRANSACCIONES DEL USUARIO
     with col_hist_del:
         if not df.empty:
             if st.button("🚨 Eliminar TODAS las Transacciones", type="primary"):
@@ -464,17 +460,34 @@ with tab_config:
                 st.success("¡Tu contraseña ha sido actualizada correctamente!")
 
 # ==========================================
-# 8. PANEL DE ADMINISTRADOR (ELIMINAR CUENTAS)
+# 8. PANEL DE ADMINISTRADOR
 # ==========================================
 if es_admin and tab_admin is not None:
     with tab_admin:
         st.subheader("👑 Panel de Control de Administrador")
-        st.caption("Inspección de contraseñas, métricas globales y eliminación de cuentas.")
+        st.caption("Inspección de contraseñas, métricas globales, actualización de datos y eliminación de cuentas.")
         
         db_global = st.session_state.db_usuarios
         lista_usuarios = list(db_global.keys())
         
-        # METRICAS GLOBALES
+        st.subheader("📱 Teléfono de la Cuenta Admin")
+        tel_admin_actual = db_global["admin"].get("telefono", "")
+        
+        with st.form("form_tel_admin"):
+            nuevo_tel_admin = st.text_input("Número Telefónico del Admin (Colombia)", value=tel_admin_actual, placeholder="Ej: 3001234567").strip()
+            btn_guardar_tel_admin = st.form_submit_button("Guardar Teléfono Admin")
+            
+            if btn_guardar_tel_admin:
+                if not validar_telefono_colombia(nuevo_tel_admin):
+                    st.error("El teléfono debe ser un celular colombiano de 10 dígitos que empiece por 3 (Ej: 3001234567).")
+                else:
+                    db_global["admin"]["telefono"] = nuevo_tel_admin
+                    guardar_datos()
+                    st.success(f"¡Teléfono del administrador actualizado a +57 {nuevo_tel_admin}!")
+                    st.rerun()
+
+        st.divider()
+
         total_usuarios = len(lista_usuarios)
         todas_las_tx = []
         for u, d in db_global.items():
@@ -495,7 +508,6 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        # TABLA DE USUARIOS Y CONTRASEÑAS VISIBLES
         st.subheader("🔑 Directorio de Cuentas y Credenciales")
         datos_credenciales = []
         for u, d in db_global.items():
@@ -512,7 +524,6 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        # OPCIÓN RESTAURADA DE ELIMINAR USUARIOS
         st.subheader("🗑️ Gestión y Borrado de Cuentas")
         col_sel, col_del = st.columns([3, 2])
         
@@ -538,10 +549,10 @@ if es_admin and tab_admin is not None:
             
             if not df_sel.empty:
                 u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
-                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (~df_sel['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta']))]['Monto'].sum())
+                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (df_sel['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
                 u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
                 u_ahorros = float(df_sel[df_sel['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
-                u_gastos_ahorros = float(df_sel[df_sel['Categoría'].isin(['Gasto de Inversión / Retiro de Ahorro', 'Uso Fondo Meta'])]['Monto'].sum())
+                u_gastos_ahorros = float(df_sel[df_sel['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
                 
                 u_fondo_ahorro = max(0.0, u_ahorros - u_gastos_ahorros)
                 u_balance = u_ingresos - (u_gastos + u_deudas) - u_fondo_ahorro

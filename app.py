@@ -52,6 +52,8 @@ if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
 def formato_cop(valor):
+    if valor < 0:
+        return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
 # ==========================================
@@ -142,8 +144,6 @@ with tab_dashboard:
         ingresos_totales, gastos_totales, deudas_totales, ahorros_totales = 0.0, 0.0, 0.0, 0.0
         
     egresos_totales = gastos_totales + deudas_totales
-    
-    # Balance disponible descontando ahorros acumulados
     balance = ingresos_totales - egresos_totales - ahorros_totales
     
     # ALERTAS DE PRESUPUESTO
@@ -183,7 +183,7 @@ with tab_dashboard:
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO DE TRANSACCIONES Y EXPORTACIÓN
+# 5. REGISTRO DE TRANSACCIONES Y ALERTA DE RIESGO
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
@@ -194,12 +194,12 @@ with tab_registro:
         col_a, col_b = st.columns(2)
         
         with col_a:
-            tipo = st.selectbox("Tipo de Movimiento", ["Ahorro / Inversión", "Ingreso", "Gasto", "Deuda"])
+            tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
             monto = st.number_input("Monto (COP $)", min_value=1000.0, step=50000.0, format="%.0f")
             fecha = st.date_input("Fecha de la Transacción", datetime.now())
             
         with col_b:
-            categoria = st.selectbox("Categoría", ["Ahorro Meta", "Nómina", "Alquiler", "Alimentación", "Servicios", "Transporte", "Tarjeta Crédito", "Uso Fondo Meta", "Otros"])
+            categoria = st.selectbox("Categoría", ["Uso Fondo Meta", "Ahorro Meta", "Nómina", "Alquiler", "Alimentación", "Servicios", "Transporte", "Tarjeta Crédito", "Otros"])
             meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
             descripcion = st.text_input("Descripción (Opcional)")
             
@@ -216,24 +216,36 @@ with tab_registro:
             }
             datos_user["transacciones"].append(nueva_tx)
             
-            # NOTIFICACIONES
-            if tipo == "Ingreso":
-                st.balloons()
-                st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Saldo disponible estimado: **{formato_cop(balance + monto)}**.")
-            elif tipo in ["Gasto", "Deuda"]:
-                if egresos_totales + monto > ingresos_totales:
-                    st.warning("⚠️ Este gasto sobrepasa tus ingresos acumulados.")
-            
-            # ACTUALIZACIÓN DIRECTA EN METAS
+            # ACTUALIZACIÓN EN TIEMPO REAL CON ALERTA DE METAS EN RIESGO
             if meta_destino != "Ninguna":
                 for m in datos_user["metas"]:
                     if m["Meta"] == meta_destino:
+                        saldo_previo = float(m.get("Actual", 0.0))
+                        
                         if tipo in ["Ahorro / Inversión", "Ingreso"]:
-                            m["Actual"] = float(m.get("Actual", 0.0)) + monto
-                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en '{meta_destino}'!")
+                            m["Actual"] = saldo_previo + monto
+                            st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en la meta '{meta_destino}'!")
                         elif tipo in ["Gasto", "Deuda"]:
-                            m["Actual"] = max(0.0, float(m.get("Actual", 0.0)) - monto)
-                            st.warning(f"🔻 Se descontaron {formato_cop(monto)} de la meta '{meta_destino}'.")
+                            # Permite valores negativos si se gasta más de lo acumulado
+                            m["Actual"] = saldo_previo - monto
+                            
+                            # Si se sobrepasa el acumulado, se activa la alerta de riesgo
+                            if m["Actual"] < 0:
+                                st.error(
+                                    f"🚨 **¡ALERTA: META EN RIESGO!**\n\n"
+                                    f"Has registrado un gasto de **{formato_cop(monto)}** asociado a la meta **'{meta_destino}'** "
+                                    f"que supera su fondo acumulado previo (**{formato_cop(saldo_previo)}**).\n\n"
+                                    f"⚠️ La meta ha entrado en un **déficit negativo de {formato_cop(m['Actual'])}**."
+                                )
+                            else:
+                                st.warning(f"🔻 Se retiran {formato_cop(monto)} de la meta '{meta_destino}'. Saldo restante: {formato_cop(m['Actual'])}.")
+
+            # NOTIFICACIONES GENERALES
+            elif tipo == "Ingreso":
+                st.balloons()
+                st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Saldo disponible estimado: **{formato_cop(balance + monto)}**.")
+            elif tipo in ["Gasto", "Deuda"] and (egresos_totales + monto > ingresos_totales):
+                st.warning("⚠️ Este gasto sobrepasa tus ingresos acumulados.")
 
             guardar_datos()
             st.rerun()
@@ -246,9 +258,7 @@ with tab_registro:
         
     with col_hist_export:
         if not df.empty:
-            # Generador CSV compatible con Excel
             csv_data = df.to_csv(index=False).encode('utf-8-sig')
-            
             st.download_button(
                 label="📥 Descargar Reporte (Excel / CSV)",
                 data=csv_data,
@@ -273,14 +283,14 @@ with tab_registro:
                     for m in datos_user["metas"]:
                         if m["Meta"] == tx_eliminada["Meta_Asociada"]:
                             if tx_eliminada.get("Tipo") in ["Ahorro / Inversión", "Ingreso"]:
-                                m["Actual"] = max(0.0, float(m.get("Actual", 0.0)) - tx_eliminada["Monto"])
+                                m["Actual"] = float(m.get("Actual", 0.0)) - tx_eliminada["Monto"]
                             elif tx_eliminada.get("Tipo") in ["Gasto", "Deuda"]:
                                 m["Actual"] = float(m.get("Actual", 0.0)) + tx_eliminada["Monto"]
                 guardar_datos()
                 st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO Y METAS EN TIEMPO REAL
+# 6. PLANES DE AHORRO CON METAS EN RIESGO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -338,13 +348,24 @@ with tab_ahorro:
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
-            porcentaje = min(monto_actual / monto_objetivo, 1.0) if monto_objetivo > 0 else 0.0
+            
+            # Cálculo del porcentaje de cumplimiento (permite valores negativos)
+            porcentaje_real = (monto_actual / monto_objetivo) * 100 if monto_objetivo > 0 else 0.0
             
             st.markdown(f"### 🎯 {meta['Meta']}")
-            st.write(f"**Progreso:** {formato_cop(monto_actual)} de {formato_cop(monto_objetivo)} (**{porcentaje * 100:.1f}%**)")
             
-            # Barra de progreso dinámica
-            st.progress(float(porcentaje))
+            # CONTROL VISUAL DE METAS EN RIESGO / NÚMEROS NEGATIVOS
+            if monto_actual < 0:
+                st.error(
+                    f"⚠️ **ESTADO: META EN RIESGO Y FONDOS EN NEGATIVO**\n\n"
+                    f"**Acumulado Actual:** `{formato_cop(monto_actual)}` de `{formato_cop(monto_objetivo)}` (**{porcentaje_real:.1f}%**)\n\n"
+                    f"🚨 Has retirado más dinero del disponible en este plan. Cubre el saldo negativo para retomar el avance."
+                )
+                st.progress(0.0) # Barra en cero para reflejar el déficit
+            else:
+                porcentaje_bar = min(max(monto_actual / monto_objetivo, 0.0), 1.0)
+                st.write(f"**Progreso:** {formato_cop(monto_actual)} de {formato_cop(monto_objetivo)} (**{porcentaje_real:.1f}%**)")
+                st.progress(porcentaje_bar)
             
             col_m_details1, col_m_details2, col_m_btn = st.columns([3, 3, 1])
             col_m_details1.caption(f"📅 **Plazo estimado:** {plazo_m} meses")

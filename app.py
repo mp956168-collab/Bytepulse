@@ -68,18 +68,20 @@ def parsear_monto(texto_monto):
     return float(limpio) if limpio else 0.0
 
 # ==========================================
-# COMPONENTE DE ENTRADA CON MÁSCARA TECLA A TECLA (JS)
+# COMPONENTE CON MÁSCARA TECLA A TECLA (JS)
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
     """
-    Crea un campo de texto que aplica los puntos de miles tecla a tecla al escribir.
+    Crea un campo de texto que aplica los puntos de miles tecla a tecla en vivo y guarda el valor.
     """
+    monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
+    
     html_code = f"""
     <div style="font-family: sans-serif; margin-bottom: 10px;">
-        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 4px;">{label}</label>
-        <input type="text" id="{key_name}" value="{valor_defecto:,.0f}".replace(',', '.') 
+        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 6px; font-weight: 500;">{label}</label>
+        <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
                placeholder="0" 
-               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; outline: none; box-sizing: border-box;">
+               style="width: 100%; padding: 10px 14px; font-size: 16px; border: 1px solid #d3d3d3; border-radius: 8px; outline: none; box-sizing: border-box;">
     </div>
     <script>
         const input = document.getElementById("{key_name}");
@@ -90,14 +92,24 @@ def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
             return new Intl.NumberFormat('es-CO').format(num);
         }}
 
+        function enviarValor() {{
+            window.parent.postMessage({{
+                type: 'streamlit:setComponentValue',
+                value: input.value
+            }}, '*');
+        }}
+
         input.addEventListener("input", function(e) {{
-            let cursor = e.target.selectionStart;
             let val = e.target.value;
             e.target.value = formatear(val);
+            enviarValor();
         }});
+
+        enviarValor();
     </script>
     """
-    components.html(html_code, height=75)
+    val_string = components.html(html_code, height=75)
+    return parsear_monto(val_string)
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -307,11 +319,8 @@ with tab_registro:
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # MÁSCARA TECLA A TECLA AL ESCRIBIR
-        input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
-        monto_input_raw = st.text_input("Confirmar Monto en Sistema", value="50.000", help="Lee automáticamente el número sin importar cómo lo escribas")
-        monto = parsear_monto(monto_input_raw)
-        st.caption(f"💵 **Confirmación Final:** `{formato_cop(monto)}`")
+        # MÁSCARA DIRECTA TECLA A TECLA
+        monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
@@ -460,25 +469,15 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        
-        input_moneda_tiempo_real("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
-        monto_meta_raw = st.text_input("Confirmar Objetivo", value="1.000.000")
-        monto_meta = parsear_monto(monto_meta_raw)
-        
-        input_moneda_tiempo_real("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
-        monto_inicial_raw = st.text_input("Confirmar Ahorro Inicial", value="0")
-        monto_inicial = parsear_monto(monto_inicial_raw)
+        monto_meta = input_moneda_tiempo_real("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
+        monto_inicial = input_moneda_tiempo_real("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
-        col_freq1, col_freq2 = st.columns(2)
         
-        meta_d_raw = col_freq1.text_input("Meta Diaria Sugerida (COP $)", value="0")
-        meta_diaria_manual = parsear_monto(meta_d_raw)
-        
-        meta_s_raw = col_freq2.text_input("Meta Semanal Sugerida (COP $)", value="0")
-        meta_semanal_manual = parsear_monto(meta_s_raw)
+        meta_diaria_manual = input_moneda_tiempo_real("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
+        meta_semanal_manual = input_moneda_tiempo_real("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")
     

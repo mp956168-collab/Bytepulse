@@ -60,8 +60,31 @@ def formato_cop(valor):
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
-def convertir_df_a_csv(dataframe):
-    return dataframe.to_csv(index=False).encode('utf-8-sig')
+# --- FUNCIONES DE EXPORTACIÓN NATIVAS (SIN LIBRERÍAS EXTERNAS) ---
+def generar_excel_nativo(dataframe):
+    return dataframe.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+
+def generar_pdf_nativo(dataframe, titulo="Reporte Financiero"):
+    html_content = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            h2 {{ color: #2c3e50; text-align: center; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; font-size: 12px; }}
+            th {{ background-color: #2c3e50; color: white; }}
+            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body onload="window.print()">
+        <h2>{titulo}</h2>
+        {dataframe.to_html(index=False, classes='table')}
+    </body>
+    </html>
+    """
+    return html_content.encode('utf-8')
 
 # ==========================================
 # 2. AUTENTICACIÓN Y REGISTRO
@@ -316,18 +339,28 @@ with tab_registro:
 
     st.divider()
     
-    col_hist_head, col_hist_csv, col_hist_del = st.columns([2.5, 1.5, 1.5])
+    col_hist_head, col_hist_excel, col_hist_pdf, col_hist_del = st.columns([2, 1.2, 1.2, 1.6])
     with col_hist_head:
         st.subheader("Historial de Transacciones")
         
-    with col_hist_csv:
+    with col_hist_excel:
         if not df.empty:
-            csv_bytes = convertir_df_a_csv(df)
+            bytes_excel = generar_excel_nativo(df)
             st.download_button(
-                label="📊 Exportar Tabla (CSV/Excel)",
-                data=csv_bytes,
+                label="📊 Exportar Excel",
+                data=bytes_excel,
                 file_name=f"Reporte_Financiero_{user}.csv",
                 mime="text/csv"
+            )
+
+    with col_hist_pdf:
+        if not df.empty:
+            bytes_pdf = generar_pdf_nativo(df, titulo=f"Reporte Financiero - Usuario: {user.capitalize()}")
+            st.download_button(
+                label="📄 Imprimir/PDF",
+                data=bytes_pdf,
+                file_name=f"Reporte_Financiero_{user}.html",
+                mime="text/html"
             )
 
     with col_hist_del:
@@ -366,7 +399,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO
+# 6. PLANES DE AHORRO CON METAS DIARIAS, SEMANALES Y MENSUALES
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -382,10 +415,15 @@ with tab_ahorro:
         with col_m1:
             nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
             monto_meta = st.number_input("Monto Objetivo (COP $)", min_value=100000.0, step=100000.0, format="%.0f")
+            monto_inicial = st.number_input("Ahorro Inicial (COP $)", min_value=0.0, step=50000.0, format="%.0f")
+            
         with col_m2:
             plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
-            monto_inicial = st.number_input("Ahorro Inicial (COP $)", min_value=0.0, step=50000.0, format="%.0f")
-        
+            st.caption("⏱️ **Frecuencia de Meta Deseada:**")
+            col_freq1, col_freq2 = st.columns(2)
+            meta_diaria_manual = col_freq1.number_input("Meta Diaria Sugerida (Opcional COP $)", min_value=0.0, step=5000.0, format="%.0f")
+            meta_semanal_manual = col_freq2.number_input("Meta Semanal Sugerida (Opcional COP $)", min_value=0.0, step=20000.0, format="%.0f")
+
         btn_crear_meta = st.form_submit_button("Guardar Meta de Ahorro")
         
         if btn_crear_meta:
@@ -393,7 +431,9 @@ with tab_ahorro:
                 "Meta": nombre_meta, 
                 "Objetivo": float(monto_meta), 
                 "Actual": float(monto_inicial), 
-                "Plazo_Meses": int(plazo_meses)
+                "Plazo_Meses": int(plazo_meses),
+                "Meta_Diaria_Manual": float(meta_diaria_manual),
+                "Meta_Semanal_Manual": float(meta_semanal_manual)
             })
             
             if monto_inicial > 0:
@@ -408,7 +448,7 @@ with tab_ahorro:
 
             guardar_datos()
             cuota_mes = max(0.0, monto_meta - monto_inicial) / plazo_meses
-            st.success(f"¡Meta creada! Debes abonar **{formato_cop(cuota_mes)}/mes** durante {plazo_meses} meses.")
+            st.success(f"¡Meta creada! Debes abonar aproximadamente **{formato_cop(cuota_mes)}/mes** durante {plazo_meses} meses.")
             st.rerun()
 
     st.divider()
@@ -424,7 +464,16 @@ with tab_ahorro:
             plazo_m = int(meta.get("Plazo_Meses", 1))
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
+            
+            # Cálculo automático de cuotas según el monto faltante
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
+            cuota_semanal = cuota_mensual / 4.33 if cuota_mensual > 0 else 0
+            cuota_diaria = cuota_mensual / 30.0 if cuota_mensual > 0 else 0
+            
+            # Si el usuario especificó metas manuales las usamos, de lo contrario usamos el cálculo de la cuota faltante
+            meta_d_display = meta.get("Meta_Diaria_Manual", 0.0) if meta.get("Meta_Diaria_Manual", 0.0) > 0 else cuota_diaria
+            meta_s_display = meta.get("Meta_Semanal_Manual", 0.0) if meta.get("Meta_Semanal_Manual", 0.0) > 0 else cuota_semanal
+            
             porcentaje_real = (monto_actual / monto_objetivo) * 100 if monto_objetivo > 0 else 0.0
             
             st.markdown(f"### 🎯 {meta['Meta']}")
@@ -441,11 +490,13 @@ with tab_ahorro:
                 st.write(f"**Progreso:** {formato_cop(monto_actual)} de {formato_cop(monto_objetivo)} (**{porcentaje_real:.1f}%**)")
                 st.progress(porcentaje_bar)
             
-            col_m_details1, col_m_details2, col_m_btn = st.columns([3, 3, 1])
-            col_m_details1.caption(f"📅 **Plazo estimado:** {plazo_m} meses")
-            col_m_details2.caption(f"📌 **Cuota Mensual Requerida:** {formato_cop(cuota_mensual)} / mes")
+            # Desglose de metas Diarias, Semanales y Mensuales
+            mc1, mc2, mc3, mc4 = st.columns([2, 2, 2, 1])
+            mc1.metric("📅 Meta Diaria", formato_cop(meta_d_display))
+            mc2.metric("🗓️ Meta Semanal", formato_cop(meta_s_display))
+            mc3.metric("📆 Meta Mensual", formato_cop(cuota_mensual))
             
-            if col_m_btn.button("🗑️ Eliminar", key=f"btn_del_meta_{idx}"):
+            if mc4.button("🗑️ Eliminar", key=f"btn_del_meta_{idx}"):
                 meta_to_delete = idx
                 
             st.divider()
@@ -534,7 +585,7 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        col_cred_head, col_cred_csv = st.columns([3.5, 1.5])
+        col_cred_head, col_cred_excel, col_cred_pdf = st.columns([3, 1, 1])
         with col_cred_head:
             st.subheader("🔑 Directorio de Cuentas y Credenciales")
         
@@ -550,14 +601,24 @@ if es_admin and tab_admin is not None:
             
         df_credenciales = pd.DataFrame(datos_credenciales)
         
-        with col_cred_csv:
+        with col_cred_excel:
             if not df_credenciales.empty:
-                csv_admin = convertir_df_a_csv(df_credenciales)
+                b_excel_admin = generar_excel_nativo(df_credenciales)
                 st.download_button(
-                    label="📊 Exportar Usuarios (CSV)",
-                    data=csv_admin,
+                    label="📊 Excel Usuarios",
+                    data=b_excel_admin,
                     file_name="Directorio_Usuarios.csv",
                     mime="text/csv"
+                )
+                
+        with col_cred_pdf:
+            if not df_credenciales.empty:
+                b_pdf_admin = generar_pdf_nativo(df_credenciales, titulo="Directorio de Usuarios")
+                st.download_button(
+                    label="📄 Imprimir/PDF",
+                    data=b_pdf_admin,
+                    file_name="Directorio_Usuarios.html",
+                    mime="text/html"
                 )
 
         st.dataframe(df_credenciales, use_container_width=True)

@@ -85,46 +85,51 @@ def formato_cop(valor):
     return f"${val_float:,.0f}".replace(",", ".")
 
 # ==========================================
-# INPUT MONEDA CON MÁSCARA AUTOMÁTICA EN TIEMPO REAL (JS)
+# INPUT MONEDA UNIFICADO CON MÁSCARA EN TIEMPO REAL
 # ==========================================
 def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
-    key_val = f"val_{key_name}"
+    val_key = f"val_num_{key_name}"
     
-    if key_val not in st.session_state:
-        st.session_state[key_val] = str(int(valor_defecto))
+    if val_key not in st.session_state:
+        st.session_state[val_key] = float(valor_defecto)
 
-    # Componente visual con JavaScript puro inyectado para formatear al vuelo
+    # Formatear el valor inicial con puntos para mostrarse estéticamente
+    val_inicial_str = f"{int(st.session_state[val_key]):,}".replace(",", ".")
+
+    # Componente visual integrado y único (sin duplicidades)
     component_html = f"""
-    <div style="font-family: sans-serif; margin-bottom: 1rem;">
-        <label style="font-size: 14px; color: #fafafa; display: block; margin-bottom: 6px;">{label}</label>
-        <input type="text" id="input_{key_name}" value="{st.session_state[key_val]}" 
-        style="width: 100%; padding: 8px 12px; background-color: #262730; color: white; border: 1px solid #41424C; border-radius: 4px; font-size: 16px;"
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin-bottom: 1rem;">
+        <label style="font-size: 14px; color: #fafafa; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
+        <input type="text" id="input_{key_name}" value="{val_inicial_str}" 
+        style="width: 100%; padding: 8px 12px; background-color: #262730; color: white; border: 1px solid #41424C; border-radius: 4px; font-size: 16px; outline: none;"
         oninput="
-            let val = this.value.replace(/\\D/g, '');
-            if(val === '') {{
+            let cleanVal = this.value.replace(/\\D/g, '');
+            if(cleanVal === '') {{
                 this.value = '';
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '0'}}, '*');
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: 0}}, '*');
             }} else {{
-                let num = parseInt(val, 10);
-                let formatted = num.toLocaleString('de-DE'); // Formato con puntos de miles estilo alemán/colombiano
-                this.value = formatted;
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: val}}, '*');
+                let num = parseInt(cleanVal, 10);
+                this.value = num.toLocaleString('de-DE');
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: num}}, '*');
             }}
-        ">
+        "
+        onfocus="this.style.borderColor='#ff4b4b';"
+        onblur="this.style.borderColor='#41424C';"
+        >
     </div>
     """
     
-    # Renderizamos el componente HTML interactivo y respaldamos con st.text_input estándar por seguridad de estado
-    val_str = components.html(component_html, height=75)
+    # Renderizamos únicamente el componente interactivo HTML limpio
+    res = components.html(component_html, height=75)
     
-    # Capturamos el valor numérico limpio desde el estado de sesión secundario si existe
-    raw_input = st.text_input(label, value=f"{int(valor_defecto):,}".replace(",", "."), key=key_name)
-    solo_numeros = "".join(filter(str.isdigit, raw_input))
-    
-    try:
-        return float(solo_numeros) if solo_numeros else 0.0
-    except ValueError:
-        return 0.0
+    # Si Streamlit devuelve un valor actualizado por el usuario, lo guardamos en sesión
+    if res is not None:
+        try:
+            st.session_state[val_key] = float(res)
+        except:
+            pass
+            
+    return st.session_state[val_key]
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):

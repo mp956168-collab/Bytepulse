@@ -730,92 +730,181 @@ if es_admin and tab_admin is not None:
 import base64
 import streamlit.components.v1 as components
 
-# 1. Cargar la imagen local y convertirla a Base64
-with open("porrista.png", "rb") as img_file:
-    img_base64 = base64.b64encode(img_file.read()).decode()
+# Cargar la imagen exacta del widget que compartiste
+try:
+    with open("Fondo de saludo  eliminado.png", "rb") as img_file:
+        img_base64 = base64.b64encode(img_file.read()).decode()
+        img_src = f"data:image/png;base64,{img_base64}"
+except FileNotFoundError:
+    img_src = ""
 
-# 2. Renderizar la mascota flotante en la esquina inferior derecha
-floating_wrapper = f"""
-<style>
-.floating-mascot {{
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 999999;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    cursor: pointer;
-}}
-.chat-bubble {{
-    background: white;
-    padding: 12px 18px;
-    border-radius: 15px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    margin-bottom: 10px;
-    font-family: sans-serif;
-    font-size: 14px;
-    color: #333;
-    border: 1px solid #e0e0e0;
-}}
-.mascot-img {{
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    object-fit: cover;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    background: white;
-}}
-</style>
-<div class="floating-mascot">
-    <div class="chat-bubble">
-        👋 ¡Hola! ¿Listo para <span style="color: green; font-weight: bold;">ahorrar</span> hoy?
+# Estructura completa HTML/CSS/JS adaptada para Streamlit
+widget_html = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    .mascot-widget-container {{
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      font-family: system-ui, -apple-system, sans-serif;
+    }}
+    .mascot-speech-bubble {{
+      background: #ffffff;
+      color: #1e293b;
+      padding: 12px 16px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+      border: 2px solid #e2e8f0;
+      margin-bottom: 8px;
+      max-width: 200px;
+      font-size: 14px;
+      line-height: 1.3;
+      position: relative;
+      animation: floatMessage 3s ease-in-out infinite;
+      cursor: pointer;
+    }}
+    .mascot-speech-bubble::after {{
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      right: 25px;
+      border-width: 8px 8px 0;
+      border-style: solid;
+      border-color: #ffffff transparent;
+      display: block;
+      width: 0;
+    }}
+    .mascot-speech-bubble strong {{
+      color: #16a34a;
+    }}
+    .mascot-trigger-btn {{
+      background: #ffffff;
+      border: 3px solid #e2e8f0;
+      border-radius: 50%;
+      width: 75px;
+      height: 75px;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+      padding: 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }}
+    .mascot-trigger-btn:hover {{
+      transform: scale(1.1) rotate(-4deg);
+    }}
+    .mascot-img {{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.1));
+    }}
+    .mascot-chat-box {{
+      display: none;
+      position: absolute;
+      bottom: 95px;
+      right: 0;
+      width: 280px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+      flex-direction: column;
+    }}
+    .mascot-chat-header {{
+      background: #16a34a;
+      color: white;
+      padding: 12px 16px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+    .mascot-chat-close {{
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+    }}
+    .mascot-chat-body {{
+      padding: 16px;
+      font-size: 14px;
+      color: #334155;
+    }}
+    .mascot-chat-body button {{
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #0f172a;
+      text-align: left;
+      transition: background 0.2s;
+    }}
+    .mascot-chat-body button:hover {{
+      background: #f1f5f9;
+    }}
+    @keyframes floatMessage {{
+      0%, 100% {{ transform: translateY(0); }}
+      50% {{ transform: translateY(-5px); }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="mascot-widget-container">
+    <div class="mascot-chat-box" id="mascotChatBox">
+      <div class="mascot-chat-header">
+        <span>Ahorracoon 🦝</span>
+        <button class="mascot-chat-close" id="closeChatBtn">&times;</button>
+      </div>
+      <div class="mascot-chat-body">
+        <p>¡Hola! Soy tu copiloto. ¿Qué quieres hacer hoy con tus finanzas?</p>
+        <button onclick="alert('Abriendo metas...')">🎯 Ver mi meta mensual</button>
+        <button onclick="alert('Abriendo calculadora...')">🧮 Calcular un nuevo plan</button>
+      </div>
     </div>
-    <img src="data:image/png;base64,{img_base64}" class="mascot-img">
-</div>
+    
+    <div class="mascot-speech-bubble" id="speechBubble">
+      👋 ¡Hola! ¿Listo para <strong>ahorrar</strong> hoy?[cite: 1]
+    </div>
+    
+    <button class="mascot-trigger-btn" id="mascotBtn" aria-label="Abrir asistente de ahorro">
+      <img src="{img_src}" alt="Mapache Ahorracoon" class="mascot-img">
+    </button>
+  </div>
+
+  <script>
+    const mascotBtn = document.getElementById('mascotBtn');
+    const speechBubble = document.getElementById('speechBubble');
+    const mascotChatBox = document.getElementById('mascotChatBox');
+    const closeChatBtn = document.getElementById('closeChatBtn');
+
+    function toggleChat() {{
+      const isOpen = mascotChatBox.style.display === 'flex';
+      mascotChatBox.style.display = isOpen ? 'none' : 'flex';
+      speechBubble.style.display = isOpen ? 'block' : 'none';
+    }
+
+    mascotBtn.addEventListener('click', toggleChat);
+    speechBubble.addEventListener('click', toggleChat);
+    closeChatBtn.addEventListener('click', toggleChat);
+  </script>
+</body>
+</html>
 """
-components.html(floating_wrapper, height=220, scrolling=False)
 
-
-# 3. SECCIÓN DE CHAT CON LA MASCOTA Y SU IMAGEN EN LA PÁGINA
-st.markdown("---")
-st.subheader("💬 Hazle preguntas a tu mascota")
-
-# Inicializar historial de chat
-if "mensajes_mascota" not in st.session_state:
-    st.session_state.mensajes_mascota = [
-        {"origen": "mascota", "texto": "¡Hola! Pregúntame sobre tus finanzas, ahorros o consejos para hoy."}
-    ]
-
-# Mostrar los mensajes con la imagen de la mascota integrada
-for msg in st.session_state.mensajes_mascota:
-    if msg["origen"] == "mascota":
-        col1, col2 = st.columns([1, 10])
-        with col1:
-            # Mostrar la imagen de la mascota usando HTML dentro de Streamlit
-            st.markdown(f'<img src="data:image/png;base64,{img_base64}" style="width:50px; height:50px; border-radius:50%; object-fit:cover;">', unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"**Mascota:** {msg['texto']}")
-    else:
-        st.markdown(f"**Tú:** {msg['texto']}")
-
-# Entrada de texto para preguntar
-pregunta_usuario = st.text_input("Escribe tu duda financiera aquí...", key="input_chat_mascota")
-
-if st.button("Enviar"):
-    if pregunta_usuario.strip():
-        # Guardar la pregunta del usuario
-        st.session_state.mensajes_mascota.append({"origen": "usuario", "texto": pregunta_usuario})
-        
-        # Lógica de respuesta de la mascota
-        pregunta_lower = pregunta_usuario.lower()
-        if "ahorrar" in pregunta_lower:
-            respuesta = "Te sugiero apartar un porcentaje fijo de tus ingresos cada vez que te paguen."
-        elif "gasto" in pregunta_lower:
-            respuesta = "Echa un vistazo a tus registros en la app para ver en qué se va el dinero más rápido."
-        else:
-            respuesta = f"¡Excelente pregunta! Sigue registrando tus datos para que podamos analizarlo juntos."
-            
-        # Guardar la respuesta de la mascota
-        st.session_state.mensajes_mascota.append({"origen": "mascota", "texto": respuesta})
-        st.rerun()
+components.html(widget_html, height=350, scrolling=False)

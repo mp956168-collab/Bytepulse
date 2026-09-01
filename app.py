@@ -87,16 +87,14 @@ def formato_cop(valor):
 # ==========================================
 # INPUT MONEDA UNIFICADO CON MÁSCARA EN TIEMPO REAL
 # ==========================================
-def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
+def input_moneda_con_puntos(label, key_name, valor_defecto=0):
     val_key = f"val_num_{key_name}"
     
     if val_key not in st.session_state:
         st.session_state[val_key] = float(valor_defecto)
 
-    # Formatear el valor inicial con puntos para mostrarse estéticamente
-    val_inicial_str = f"{int(st.session_state[val_key]):,}".replace(",", ".")
+    val_inicial_str = f"{int(st.session_state[val_key]):,}".replace(",", ".") if st.session_state[val_key] > 0 else ""
 
-    # Componente visual integrado y único (sin duplicidades)
     component_html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin-bottom: 1rem;">
         <label style="font-size: 14px; color: #fafafa; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
@@ -119,10 +117,8 @@ def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
     </div>
     """
     
-    # Renderizamos únicamente el componente interactivo HTML limpio
     res = components.html(component_html, height=75)
     
-    # Si Streamlit devuelve un valor actualizado por el usuario, lo guardamos en sesión
     if res is not None:
         try:
             st.session_state[val_key] = float(res)
@@ -486,7 +482,8 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        monto_meta = input_moneda_con_puntos("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
+        # Corrección: valor por defecto en 0 para que no sobreescriba con 1.000.000
+        monto_meta = input_moneda_con_puntos("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=0)
         monto_inicial = input_moneda_con_puntos("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
         
     with col_m2:

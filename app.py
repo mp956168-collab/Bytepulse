@@ -29,24 +29,13 @@ MENSAJES_MOTIVACIONALES = [
 def cargar_datos():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            for user in data.values():
-                if not isinstance(user, dict):
-                    continue
-                if "mascotas" not in user:
-                    user["mascotas"] = []
-                if "transacciones" not in user:
-                    user["transacciones"] = []
-                if "metas" not in user:
-                    user["metas"] = []
-            return data
+            return json.load(f)
     return {
         "admin": {
             "password": "123",
             "telefono": "3000000000",
             "transacciones": [],
-            "metas": [],
-            "mascotas": []
+            "metas": []
         }
     }
 
@@ -82,33 +71,53 @@ def parsear_monto(texto_monto):
 # COMPONENTE CON MÁSCARA TECLA A TECLA (MODO OSCURO NATIVO)
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
+    """
+    Crea un campo de texto alineado al Modo Oscuro nativo de Streamlit (#262730).
+    """
     monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
     
-    html_code = (
-        '<div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">'
-        f'<label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>'
-        f'<input type="text" id="{key_name}" value="{monto_inicial_fmt}" placeholder="0" '
-        'style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">'
-        '</div>'
-        '<script>'
-        f'const input = document.getElementById("{key_name}");'
-        'input.addEventListener("focus", function() { this.style.backgroundColor = "#262730"; this.style.borderColor = "#ff4b4b"; });'
-        'input.addEventListener("blur", function() { this.style.backgroundColor = "#262730"; this.style.borderColor = "rgba(250, 250, 250, 0.2)"; });'
-        'function formatear(val) {'
-        '    let num = val.replace(/\\D/g, "");'
-        '    if(!num) return "";'
-        '    return new Intl.NumberFormat("es-CO").format(num);'
-        '}'
-        'function enviarValor() {'
-        '    window.parent.postMessage({ type: "streamlit:setComponentValue", value: input.value }, "*");'
-        '}'
-        'input.addEventListener("input", function(e) {'
-        '    e.target.value = formatear(e.target.value);'
-        '    enviarValor();'
-        '});'
-        'enviarValor();'
-        '</script>'
-    )
+    html_code = f"""
+    <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
+        <label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
+        <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
+               placeholder="0" 
+               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">
+    </div>
+    <script>
+        const input = document.getElementById("{key_name}");
+        
+        input.addEventListener("focus", function() {{
+            this.style.backgroundColor = "#262730";
+            this.style.borderColor = "#ff4b4b";
+        }});
+        
+        input.addEventListener("blur", function() {{
+            this.style.backgroundColor = "#262730";
+            this.style.borderColor = "rgba(250, 250, 250, 0.2)";
+        }});
+
+        function formatear(val) {{
+            let num = val.replace(/\D/g, "");
+            if(!num) return "";
+            return new Intl.NumberFormat('es-CO').format(num);
+        }}
+
+        function enviarValor() {{
+            window.parent.postMessage({{
+                type: 'streamlit:setComponentValue',
+                value: input.value
+            }}, '*');
+        }}
+
+        input.addEventListener("input", function(e) {{
+            let val = e.target.value;
+            e.target.value = formatear(val);
+            enviarValor();
+        }});
+
+        enviarValor();
+    </script>
+    """
     val_string = components.html(html_code, height=75)
     return parsear_monto(val_string)
 
@@ -184,7 +193,7 @@ if st.session_state.usuario_actual is None:
                             tel_guardado = db[u_recuperar].get("telefono", "")
                             if tel_recuperar == tel_guardado:
                                 pass_encontrada = db[u_recuperar]["password"]
-                                st.success(f"📲 **SMS Enviado al +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
+                                st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
                             else:
                                 st.error("El número telefónico no coincide con el registrado.")
                         else:
@@ -209,8 +218,7 @@ if st.session_state.usuario_actual is None:
                             "password": pass_reg,
                             "telefono": tel_reg,
                             "transacciones": [],
-                            "metas": [],
-                            "mascotas": []
+                            "metas": []
                         }
                         guardar_datos()
                         st.success("Cuenta creada exitosamente. Ya puedes iniciar sesión.")
@@ -242,7 +250,7 @@ with col_logout:
 
 st.divider()
 
-titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro", "🐾 Mascotas", "⚙️ Configuración Cuenta"]
+titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro", "⚙️ Configuración Cuenta"]
 if es_admin:
     titulos_pestañas.append("👑 Control de Administrador")
 
@@ -251,9 +259,8 @@ pestañas = st.tabs(titulos_pestañas)
 tab_dashboard = pestañas[0]
 tab_registro = pestañas[1]
 tab_ahorro = pestañas[2]
-tab_mascotas = pestañas[3]
-tab_config = pestañas[4]
-tab_admin = pestañas[5] if es_admin else None
+tab_config = pestañas[3]
+tab_admin = pestañas[4] if es_admin else None
 
 # ==========================================
 # 4. DASHBOARD GENERAL
@@ -263,7 +270,7 @@ df = pd.DataFrame(datos_user["transacciones"])
 with tab_dashboard:
     if not df.empty:
         ingresos_totales = float(df[df['Tipo'] == 'Ingreso']['Monto'].sum())
-        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (~df['Categoría'].isin(['Uso Fondo Meta']))]['Monto'].sum())
+        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (df['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
         deudas_totales = float(df[df['Tipo'] == 'Deuda']['Monto'].sum())
         ahorros_totales = float(df[df['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
         gastos_de_ahorros = float(df[df['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
@@ -317,16 +324,17 @@ with tab_registro:
     st.subheader("Nuevo Registro Financiero")
     
     nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
-    nombres_mascotas = [masc["Nombre"] for masc in datos_user.get("mascotas", [])]
 
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
+        
         monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
+        
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
     with col_b:
-        categorias_base = [
+        categoria = st.selectbox("Categoría", [
             "Uso Fondo Meta", 
             "Ahorro Meta", 
             "Nómina", 
@@ -335,12 +343,9 @@ with tab_registro:
             "Servicios", 
             "Transporte", 
             "Tarjeta Crédito", 
-            "Mascotas (Veterinario/Comida)",
             "Otros"
-        ]
-        categoria = st.selectbox("Categoría", categorias_base)
+        ])
         meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
-        mascota_destino = st.selectbox("Asociar a Mascota (Opcional)", ["Ninguna"] + nombres_mascotas)
         descripcion = st.text_input("Descripción (Opcional)")
         
     guardar = st.button("Guardar Transacción", use_container_width=True, type="primary")
@@ -349,18 +354,13 @@ with tab_registro:
         if monto <= 0:
             st.warning("Ingresa un monto válido mayor a $0.")
         else:
-            desc_final = descripcion
-            if mascota_destino != "Ninguna":
-                desc_final = f"[{mascota_destino}] {descripcion}".strip()
-
             nueva_tx = {
                 "Fecha": str(fecha),
                 "Tipo": tipo,
                 "Categoría": categoria,
                 "Monto": monto,
-                "Descripción": desc_final,
-                "Meta_Asociada": meta_destino,
-                "Mascota_Asociada": mascota_destino
+                "Descripción": descripcion,
+                "Meta_Asociada": meta_destino
             }
             datos_user["transacciones"].append(nueva_tx)
             
@@ -373,6 +373,7 @@ with tab_registro:
                         if tipo in ["Ahorro / Inversión", "Ingreso"]:
                             m["Actual"] = saldo_previo + monto
                             st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en '{meta_destino}'!")
+                        
                         elif tipo in ["Gasto", "Deuda"]:
                             nuevo_saldo = saldo_previo - monto
                             m["Actual"] = nuevo_saldo
@@ -393,7 +394,7 @@ with tab_registro:
                                     f"(pérdida del **{pct_perdidofondo:.1f}%** del objetivo global). Quedan: **{formato_cop(nuevo_saldo)}**."
                                 )
 
-            if tipo == "Ingreso":
+            elif tipo == "Ingreso":
                 st.balloons()
                 st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Saldo disponible estimado: **{formato_cop(balance + monto)}**.")
             
@@ -483,6 +484,7 @@ with tab_ahorro:
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
+        
         meta_diaria_manual = input_moneda_tiempo_real("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
         meta_semanal_manual = input_moneda_tiempo_real("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
 
@@ -508,8 +510,7 @@ with tab_ahorro:
                     "Categoría": "Ahorro Meta",
                     "Monto": float(monto_inicial),
                     "Descripción": f"Ahorro inicial para {nombre_meta}",
-                    "Meta_Asociada": nombre_meta,
-                    "Mascota_Asociada": "Ninguna"
+                    "Meta_Asociada": nombre_meta
                 })
 
             guardar_datos()
@@ -530,12 +531,14 @@ with tab_ahorro:
             plazo_m = int(meta.get("Plazo_Meses", 1))
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
+            
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
             cuota_semanal = cuota_mensual / 4.33 if cuota_mensual > 0 else 0
             cuota_diaria = cuota_mensual / 30.0 if cuota_mensual > 0 else 0
             
             meta_d_display = meta.get("Meta_Diaria_Manual", 0.0) if meta.get("Meta_Diaria_Manual", 0.0) > 0 else cuota_diaria
             meta_s_display = meta.get("Meta_Semanal_Manual", 0.0) if meta.get("Meta_Semanal_Manual", 0.0) > 0 else cuota_semanal
+            
             porcentaje_real = (monto_actual / monto_objetivo) * 100 if monto_objetivo > 0 else 0.0
             
             st.markdown(f"### 🎯 {meta['Meta']}")
@@ -568,79 +571,7 @@ with tab_ahorro:
             st.rerun()
 
 # ==========================================
-# 7. GESTIÓN DE MASCOTAS
-# ==========================================
-with tab_mascotas:
-    st.subheader("🐾 Control y Gastos de Mascotas")
-    st.caption("Administra a tus compañeros peludos, visualiza sus gastos específicos y controla su presupuesto.")
-
-    with st.form("form_crear_mascota"):
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            nombre_mascota = st.text_input("Nombre de la Mascota", placeholder="Ej: Firulais").strip()
-        with col_p2:
-            tipo_mascota = st.selectbox("Especie", ["Perro", "Gato", "Ave", "Otro"])
-        with col_p3:
-            raza_mascota = st.text_input("Raza / Descripción", placeholder="Ej: Criollo / Labrador").strip()
-            
-        btn_crear_mascota = st.form_submit_button("Registrar Mascota", use_container_width=True)
-        
-        if btn_crear_mascota:
-            if not nombre_mascota:
-                st.warning("Debes ingresar el nombre de la mascota.")
-            else:
-                nombres_existentes = [m["Nombre"].lower() for m in datos_user["mascotas"]]
-                if nombre_mascota.lower() in nombres_existentes:
-                    st.error("Ya existe una mascota registrada con ese nombre.")
-                else:
-                    datos_user["mascotas"].append({
-                        "Nombre": nombre_mascota,
-                        "Especie": tipo_mascota,
-                        "Raza": raza_mascota
-                    })
-                    guardar_datos()
-                    st.success(f"¡Mascota **{nombre_mascota}** registrada con éxito!")
-                    st.rerun()
-
-    st.divider()
-    st.subheader("Tus Mascotas Registradas")
-
-    if not datos_user["mascotas"]:
-        st.info("No tienes mascotas registradas todavía. ¡Añade una arriba!")
-    else:
-        mascota_a_borrar = None
-        for idx, masc in enumerate(datos_user["mascotas"]):
-            txs_mascota = [t for t in datos_user["transacciones"] if t.get("Mascota_Asociada") == masc["Nombre"]]
-            gasto_total_mascota = sum([t["Monto"] for t in txs_mascota if t["Tipo"] == "Gasto"])
-
-            with st.container():
-                mc_info1, mc_info2, mc_info3, mc_info_del = st.columns([2, 2, 2, 1])
-                mc_info1.markdown(f"### 🐶 {masc['Nombre']}")
-                mc_info1.caption(f"Especie: {masc['Especie']} | Raza: {masc.get('Raza', 'No especificada')}")
-                
-                mc_info2.metric("Gastos Totales Acumulados", formato_cop(gasto_total_mascota))
-                mc_info3.metric("Movimientos Registrados", len(txs_mascota))
-                
-                if mc_info_del.button("🗑️ Eliminar", key=f"del_masc_{idx}"):
-                    mascota_a_borrar = idx
-
-                if txs_mascota:
-                    with st.expander(f"Ver historial de gastos de {masc['Nombre']}"):
-                        df_m = pd.DataFrame(txs_mascota)
-                        st.dataframe(df_m[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Descripción']], use_container_width=True)
-                st.divider()
-
-        if mascota_a_borrar is not None:
-            mascota_eliminada = datos_user["mascotas"].pop(mascota_a_borrar)
-            for t in datos_user["transacciones"]:
-                if t.get("Mascota_Asociada") == mascota_eliminada["Nombre"]:
-                    t["Mascota_Asociada"] = "Ninguna"
-            guardar_datos()
-            st.success(f"Mascota eliminada correctamente.")
-            st.rerun()
-
-# ==========================================
-# 8. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
+# 7. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
 # ==========================================
 with tab_config:
     st.subheader("🔒 Seguridad y Configuración de Cuenta")
@@ -670,7 +601,7 @@ with tab_config:
                 st.success("¡Tu contraseña ha sido actualizada correctamente!")
 
 # ==========================================
-# 9. PANEL DE ADMINISTRADOR
+# 8. PANEL DE ADMINISTRADOR
 # ==========================================
 if es_admin and tab_admin is not None:
     with tab_admin:
@@ -729,8 +660,7 @@ if es_admin and tab_admin is not None:
                 "Contraseña Actual": d.get("password", "N/A"),
                 "Teléfono Colombia": f"+57 {d.get('telefono', 'Sin registro')}",
                 "Transacciones": len(d.get("transacciones", [])),
-                "Metas": len(d.get("metas", [])),
-                "Mascotas": len(d.get("mascotas", []))
+                "Metas": len(d.get("metas", []))
             })
             
         df_credenciales = pd.DataFrame(datos_credenciales)
@@ -776,3 +706,24 @@ if es_admin and tab_admin is not None:
                     guardar_datos()
                     st.success(f"La cuenta del usuario `{usuario_seleccionado}` ha sido eliminada permanentemente.")
                     st.rerun()
+
+        if usuario_seleccionado:
+            datos_sel = db_global[usuario_seleccionado]
+            df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
+            metas_sel = datos_sel.get("metas", [])
+            
+            st.markdown(f"#### 🔍 Auditoría en vivo del usuario: `{usuario_seleccionado}`")
+            if not df_sel.empty:
+                u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
+                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto')]['Monto'].sum())
+                u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
+                
+                aud1, aud2, aud3, aud4 = st.columns(4)
+                aud1.metric("Ingresos", formato_cop(u_ingresos))
+                aud2.metric("Gastos", formato_cop(u_gastos))
+                aud3.metric("Deudas", formato_cop(u_deudas))
+                aud4.metric("Metas Registradas", len(metas_sel))
+                
+                st.dataframe(df_sel, use_container_width=True)
+            else:
+                st.info("Este usuario no tiene transacciones registradas.")

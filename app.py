@@ -29,13 +29,19 @@ MENSAJES_MOTIVACIONALES = [
 def cargar_datos():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            # Asegurar compatibilidad retroactiva con usuarios anteriores añadiendo "mascotas"
+            for user in data.values():
+                if "mascotas" not in user:
+                    user["mascotas"] = []
+            return data
     return {
         "admin": {
             "password": "123",
             "telefono": "3000000000",
             "transacciones": [],
-            "metas": []
+            "metas": [],
+            "mascotas": []
         }
     }
 
@@ -71,9 +77,6 @@ def parsear_monto(texto_monto):
 # COMPONENTE CON MÁSCARA TECLA A TECLA (MODO OSCURO NATIVO)
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
-    """
-    Crea un campo de texto alineado al Modo Oscuro nativo de Streamlit (#262730).
-    """
     monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
     
     html_code = f"""
@@ -218,7 +221,8 @@ if st.session_state.usuario_actual is None:
                             "password": pass_reg,
                             "telefono": tel_reg,
                             "transacciones": [],
-                            "metas": []
+                            "metas": [],
+                            "mascotas": []
                         }
                         guardar_datos()
                         st.success("Cuenta creada exitosamente. Ya puedes iniciar sesión.")
@@ -250,7 +254,7 @@ with col_logout:
 
 st.divider()
 
-titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro", "⚙️ Configuración Cuenta"]
+titulos_pestañas = ["📊 Dashboard General", "📝 Registrar Transacción", "🎯 Planes de Ahorro", "🐾 Mascotas", "⚙️ Configuración Cuenta"]
 if es_admin:
     titulos_pestañas.append("👑 Control de Administrador")
 
@@ -259,8 +263,9 @@ pestañas = st.tabs(titulos_pestañas)
 tab_dashboard = pestañas[0]
 tab_registro = pestañas[1]
 tab_ahorro = pestañas[2]
-tab_config = pestañas[3]
-tab_admin = pestañas[4] if es_admin else None
+tab_mascotas = pestañas[3]
+tab_config = pestañas[4]
+tab_admin = pestañas[5] if es_admin else None
 
 # ==========================================
 # 4. DASHBOARD GENERAL
@@ -270,7 +275,7 @@ df = pd.DataFrame(datos_user["transacciones"])
 with tab_dashboard:
     if not df.empty:
         ingresos_totales = float(df[df['Tipo'] == 'Ingreso']['Monto'].sum())
-        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (df['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
+        gastos_ordinarios = float(df[(df['Tipo'] == 'Gasto') & (~df['Categoría'].isin(['Uso Fondo Meta']))]['Monto'].sum())
         deudas_totales = float(df[df['Tipo'] == 'Deuda']['Monto'].sum())
         ahorros_totales = float(df[df['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
         gastos_de_ahorros = float(df[df['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
@@ -324,17 +329,16 @@ with tab_registro:
     st.subheader("Nuevo Registro Financiero")
     
     nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
+    nombres_mascotas = [masc["Nombre"] for masc in datos_user.get("mascotas", [])]
 
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
-        
         monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
-        
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
     with col_b:
-        categoria = st.selectbox("Categoría", [
+        categorias_base = [
             "Uso Fondo Meta", 
             "Ahorro Meta", 
             "Nómina", 
@@ -343,9 +347,12 @@ with tab_registro:
             "Servicios", 
             "Transporte", 
             "Tarjeta Crédito", 
+            "Mascotas (Veterinario/Comida)",
             "Otros"
-        ])
+        ]
+        categoria = st.selectbox("Categoría", categorias_base)
         meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
+        mascota_destino = st.selectbox("Asociar a Mascota (Opcional)", ["Ninguna"] + nombres_mascotas)
         descripcion = st.text_input("Descripción (Opcional)")
         
     guardar = st.button("Guardar Transacción", use_container_width=True, type="primary")
@@ -354,13 +361,18 @@ with tab_registro:
         if monto <= 0:
             st.warning("Ingresa un monto válido mayor a $0.")
         else:
+            desc_final = descripcion
+            if mascota_destino != "Ninguna":
+                desc_final = f"[{mascota_destino}] {descripcion}".strip()
+
             nueva_tx = {
                 "Fecha": str(fecha),
                 "Tipo": tipo,
                 "Categoría": categoria,
                 "Monto": monto,
-                "Descripción": descripcion,
-                "Meta_Asociada": meta_destino
+                "Descripción": desc_final,
+                "Meta_Asociada": meta_destino,
+                "Mascota_Asociada": mascota_destino
             }
             datos_user["transacciones"].append(nueva_tx)
             
@@ -373,7 +385,6 @@ with tab_registro:
                         if tipo in ["Ahorro / Inversión", "Ingreso"]:
                             m["Actual"] = saldo_previo + monto
                             st.info(f"🎉 ¡Abono de {formato_cop(monto)} registrado en '{meta_destino}'!")
-                        
                         elif tipo in ["Gasto", "Deuda"]:
                             nuevo_saldo = saldo_previo - monto
                             m["Actual"] = nuevo_saldo
@@ -394,7 +405,7 @@ with tab_registro:
                                     f"(pérdida del **{pct_perdidofondo:.1f}%** del objetivo global). Quedan: **{formato_cop(nuevo_saldo)}**."
                                 )
 
-            elif tipo == "Ingreso":
+            if tipo == "Ingreso":
                 st.balloons()
                 st.success(f"{random.choice(MENSAJES_MOTIVACIONALES)}\n\n💡 Saldo disponible estimado: **{formato_cop(balance + monto)}**.")
             
@@ -484,7 +495,6 @@ with tab_ahorro:
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
-        
         meta_diaria_manual = input_moneda_tiempo_real("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
         meta_semanal_manual = input_moneda_tiempo_real("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
 
@@ -510,7 +520,8 @@ with tab_ahorro:
                     "Categoría": "Ahorro Meta",
                     "Monto": float(monto_inicial),
                     "Descripción": f"Ahorro inicial para {nombre_meta}",
-                    "Meta_Asociada": nombre_meta
+                    "Meta_Asociada": nombre_meta,
+                    "Mascota_Asociada": "Ninguna"
                 })
 
             guardar_datos()
@@ -531,14 +542,12 @@ with tab_ahorro:
             plazo_m = int(meta.get("Plazo_Meses", 1))
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
-            
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
             cuota_semanal = cuota_mensual / 4.33 if cuota_mensual > 0 else 0
             cuota_diaria = cuota_mensual / 30.0 if cuota_mensual > 0 else 0
             
             meta_d_display = meta.get("Meta_Diaria_Manual", 0.0) if meta.get("Meta_Diaria_Manual", 0.0) > 0 else cuota_diaria
             meta_s_display = meta.get("Meta_Semanal_Manual", 0.0) if meta.get("Meta_Semanal_Manual", 0.0) > 0 else cuota_semanal
-            
             porcentaje_real = (monto_actual / monto_objetivo) * 100 if monto_objetivo > 0 else 0.0
             
             st.markdown(f"### 🎯 {meta['Meta']}")
@@ -571,7 +580,79 @@ with tab_ahorro:
             st.rerun()
 
 # ==========================================
-# 7. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
+# 7. GESTIÓN DE MASCOTAS
+# ==========================================
+with tab_mascotas:
+    st.subheader("🐾 Control y Gastos de Mascotas")
+    st.caption("Administra a tus compañeros peludos, visualiza sus gastos específicos y controla su presupuesto.")
+
+    with st.form("form_crear_mascota"):
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            nombre_mascota = st.text_input("Nombre de la Mascota", placeholder="Ej: Firulais").strip()
+        with col_p2:
+            tipo_mascota = st.selectbox("Especie", ["Perro", "Gato", "Ave", "Otro"])
+        with col_p3:
+            raza_mascota = st.text_input("Raza / Descripción", placeholder="Ej: Criollo / Labrador").strip()
+            
+        btn_crear_mascota = st.form_submit_button("Registrar Mascota", use_container_width=True)
+        
+        if btn_crear_mascota:
+            if not nombre_mascota:
+                st.warning("Debes ingresar el nombre de la mascota.")
+            else:
+                nombres_existentes = [m["Nombre"].lower() for m in datos_user["mascotas"]]
+                if nombre_mascota.lower() in nombres_existentes:
+                    st.error("Ya existe una mascota registrada con ese nombre.")
+                else:
+                    datos_user["mascotas"].append({
+                        "Nombre": nombre_mascota,
+                        "Especie": tipo_mascota,
+                        "Raza": raza_mascota
+                    })
+                    guardar_datos()
+                    st.success(f"¡Mascota **{nombre_mascota}** registrada con éxito!")
+                    st.rerun()
+
+    st.divider()
+    st.subheader("Tus Mascotas Registradas")
+
+    if not datos_user["mascotas"]:
+        st.info("No tienes mascotas registradas todavía. ¡Añade una arriba!")
+    else:
+        mascota_a_borrar = None
+        for idx, masc in enumerate(datos_user["mascotas"]):
+            txs_mascota = [t for t in datos_user["transacciones"] if t.get("Mascota_Asociada") == masc["Nombre"]]
+            gasto_total_mascota = sum([t["Monto"] for t in txs_mascota if t["Tipo"] == "Gasto"])
+
+            with st.container():
+                mc_info1, mc_info2, mc_info3, mc_info_del = st.columns([2, 2, 2, 1])
+                mc_info1.markdown(f"### 🐶 {masc['Nombre']}")
+                mc_info1.caption(f"Especie: {masc['Especie']} | Raza: {masc.get('Raza', 'No especificada')}")
+                
+                mc_info2.metric("Gastos Totales Acumulados", formato_cop(gasto_total_mascota))
+                mc_info3.metric("Movimientos Registrados", len(txs_mascota))
+                
+                if mc_info_del.button("🗑️ Eliminar", key=f"del_masc_{idx}"):
+                    mascota_a_borrar = idx
+
+                if txs_mascota:
+                    with st.expander(f"Ver historial de gastos de {masc['Nombre']}"):
+                        df_m = pd.DataFrame(txs_mascota)
+                        st.dataframe(df_m[['Fecha', 'Tipo', 'Categoría', 'Monto', 'Descripción']], use_container_width=True)
+                st.divider()
+
+        if mascota_a_borrar is not None:
+            mascota_eliminada = datos_user["mascotas"].pop(mascota_a_borrar)
+            for t in datos_user["transacciones"]:
+                if t.get("Mascota_Asociada") == mascota_eliminada["Nombre"]:
+                    t["Mascota_Asociada"] = "Ninguna"
+            guardar_datos()
+            st.success(f"Mascota eliminada correctamente.")
+            st.rerun()
+
+# ==========================================
+# 8. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
 # ==========================================
 with tab_config:
     st.subheader("🔒 Seguridad y Configuración de Cuenta")
@@ -601,7 +682,7 @@ with tab_config:
                 st.success("¡Tu contraseña ha sido actualizada correctamente!")
 
 # ==========================================
-# 8. PANEL DE ADMINISTRADOR
+# 9. PANEL DE ADMINISTRADOR
 # ==========================================
 if es_admin and tab_admin is not None:
     with tab_admin:
@@ -660,7 +741,8 @@ if es_admin and tab_admin is not None:
                 "Contraseña Actual": d.get("password", "N/A"),
                 "Teléfono Colombia": f"+57 {d.get('telefono', 'Sin registro')}",
                 "Transacciones": len(d.get("transacciones", [])),
-                "Metas": len(d.get("metas", []))
+                "Metas": len(d.get("metas", [])),
+                "Mascotas": len(d.get("mascotas", []))
             })
             
         df_credenciales = pd.DataFrame(datos_credenciales)
@@ -706,431 +788,3 @@ if es_admin and tab_admin is not None:
                     guardar_datos()
                     st.success(f"La cuenta del usuario `{usuario_seleccionado}` ha sido eliminada permanentemente.")
                     st.rerun()
-
-        if usuario_seleccionado:
-            datos_sel = db_global[usuario_seleccionado]
-            df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
-            metas_sel = datos_sel.get("metas", [])
-            
-            st.markdown(f"#### 🔍 Auditoría en vivo del usuario: `{usuario_seleccionado}`")
-            if not df_sel.empty:
-                u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
-                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto')]['Monto'].sum())
-                u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
-                
-                aud1, aud2, aud3, aud4 = st.columns(4)
-                aud1.metric("Ingresos", formato_cop(u_ingresos))
-                aud2.metric("Gastos", formato_cop(u_gastos))
-                aud3.metric("Deudas", formato_cop(u_deudas))
-                aud4.metric("Metas Registradas", len(metas_sel))
-                
-                st.dataframe(df_sel, use_container_width=True)
-            else:
-                st.info("Este usuario no tiene transacciones registradas.")
-                # ==========================================
-# WIDGET MASCOTA FLOTANTE (AHORRACOON)
-# ==========================================
-mascot_html = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    .mascot-widget-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 999999;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-
-    .mascot-speech-bubble {
-      background: #ffffff;
-      color: #1e293b;
-      padding: 12px 16px;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
-      border: 2px solid #e2e8f0;
-      margin-bottom: 8px;
-      max-width: 200px;
-      font-size: 14px;
-      line-height: 1.3;
-      position: relative;
-      animation: floatMessage 3s ease-in-out infinite;
-      cursor: pointer;
-    }
-
-    .mascot-speech-bubble::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      right: 25px;
-      border-width: 8px 8px 0;
-      border-style: solid;
-      border-color: #ffffff transparent;
-      display: block;
-      width: 0;
-    }
-
-    .mascot-speech-bubble strong {
-      color: #16a34a;
-    }
-
-    .mascot-trigger-btn {
-      background: #ffffff;
-      border: 3px solid #e2e8f0;
-      border-radius: 50%;
-      width: 75px;
-      height: 75px;
-      cursor: pointer;
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
-      padding: 6px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .mascot-trigger-btn:hover {
-      transform: scale(1.1) rotate(-4deg);
-    }
-
-    .mascot-img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .mascot-chat-box {
-      display: none;
-      position: absolute;
-      bottom: 95px;
-      right: 0;
-      width: 280px;
-      background: #ffffff;
-      border-radius: 16px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
-      border: 1px solid #e2e8f0;
-      overflow: hidden;
-      flex-direction: column;
-    }
-
-    .mascot-chat-header {
-      background: #16a34a;
-      color: white;
-      padding: 12px 16px;
-      font-weight: 600;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .mascot-chat-close {
-      background: none;
-      border: none;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-    }
-
-    .mascot-chat-body {
-      padding: 16px;
-      font-size: 14px;
-      color: #334155;
-    }
-
-    .mascot-chat-body button {
-      width: 100%;
-      background: #f8fafc;
-      border: 1px solid #cbd5e1;
-      padding: 10px;
-      margin-top: 8px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      color: #0f172a;
-      text-align: left;
-    }
-
-    @keyframes floatMessage {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-5px); }
-    }
-  </style>
-</head>
-<body>
-  <div class="mascot-widget-container">
-    <div class="mascot-chat-box" id="mascotChatBox">
-      <div class="mascot-chat-header">
-        <span>Ahorracoon 🦝</span>
-        <button class="mascot-chat-close" id="closeChatBtn">&times;</button>
-      </div>
-      <div class="mascot-chat-body">
-        <p>¡Hola! Soy tu copiloto. ¿Qué quieres hacer hoy con tus finanzas?</p>
-        <button onclick="alert('Explora el menú principal para tus metas.')">🎯 Ver mi meta mensual</button>
-        <button onclick="alert('Usa las herramientas de cálculo del panel.')">🧮 Calcular un nuevo plan</button>
-      </div>
-    </div>
-
-    <div class="mascot-speech-bubble" id="speechBubble">
-      👋 ¡Hola! ¿Listo para <strong>ahorrar</strong> hoy?
-    </div>
-
-    <button class="mascot-trigger-btn" id="mascotBtn">
-      <img src="https://i.postimg.cc/mD363k8m/Fondo-de-saludo-eliminado.png" alt="Mapache" class="mascot-img">
-    </button>
-  </div>
-
-  <script>
-    const mascotBtn = document.getElementById('mascotBtn');
-    const speechBubble = document.getElementById('speechBubble');
-    const mascotChatBox = document.getElementById('mascotChatBox');
-    const closeChatBtn = document.getElementById('closeChatBtn');
-
-    function toggleChat() {
-      const isOpen = mascotChatBox.style.display === 'flex';
-      mascotChatBox.style.display = isOpen ? 'none' : 'flex';
-      speechBubble.style.display = isOpen ? 'block' : 'none';
-    }
-
-    mascotBtn.addEventListener('click', toggleChat);
-    speechBubble.addEventListener('click', toggleChat);
-    closeChatBtn.addEventListener('click', toggleChat);
-  </script>
-</body>
-</html>
-"""
-
-components.html(mascot_html, height=0, width=0)
-import streamlit as st
-import streamlit.components.v1 as components
-
-# ==========================================
-# FUNCIÓN DE MASCOTA DINÁMICA (AHORRACOON)
-# ==========================================
-def mostrar_mascota(estado="saludo", mensaje_personalizado=None):
-    # Enlaces directos a las imágenes sin fondo
-    poses = {
-        "saludo": {
-            "img": "https://i.postimg.cc/mD363k8m/Fondo-de-saludo-eliminado.png",
-            "msg": "👋 ¡Hola! ¿Listo para <strong>ahorrar</strong> hoy?"
-        },
-        "especialista": {
-            "img": "https://i.postimg.cc/mXb4P7jZ/Fondo-de-especialista-eliminado.png",
-            "msg": "🧮 ¡Hora de hacer cuentas! Optimicemos tu presupuesto."
-        },
-        "guia": {
-            "img": "https://i.postimg.cc/26L16LgZ/Fondo-de-guia-eliminado.png",
-            "msg": "🗺️ ¿Te perdiste? Te muestro el camino hacia tu meta."
-        },
-        "porrista": {
-            "img": "https://i.postimg.cc/Pq9FpZ31/porrista.png",
-            "msg": "🎉 ¡Excelente trabajo! Cada moneda cuenta para tu tranquilidad."
-        }
-    }
-
-    config = poses.get(estado, poses["saludo"])
-    mensaje_final = mensaje_personalizado if mensaje_personalizado else config["msg"]
-
-    mascot_html = f"""
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        .mascot-widget-container {{
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          z-index: 999999;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          font-family: system-ui, -apple-system, sans-serif;
-        }}
-
-        .mascot-speech-bubble {{
-          background: #ffffff;
-          color: #1e293b;
-          padding: 12px 16px;
-          border-radius: 16px;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
-          border: 2px solid #e2e8f0;
-          margin-bottom: 8px;
-          max-width: 200px;
-          font-size: 14px;
-          line-height: 1.3;
-          position: relative;
-          animation: floatMessage 3s ease-in-out infinite;
-          cursor: pointer;
-        }}
-
-        .mascot-speech-bubble::after {{
-          content: '';
-          position: absolute;
-          bottom: -8px;
-          right: 25px;
-          border-width: 8px 8px 0;
-          border-style: solid;
-          border-color: #ffffff transparent;
-          display: block;
-          width: 0;
-        }}
-
-        .mascot-speech-bubble strong {{
-          color: #16a34a;
-        }}
-
-        .mascot-trigger-btn {{
-          background: #ffffff;
-          border: 3px solid #e2e8f0;
-          border-radius: 50%;
-          width: 75px;
-          height: 75px;
-          cursor: pointer;
-          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
-          padding: 6px;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }}
-
-        .mascot-trigger-btn:hover {{
-          transform: scale(1.1) rotate(-4deg);
-        }}
-
-        .mascot-img {{
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-        }}
-
-        .mascot-chat-box {{
-          display: none;
-          position: absolute;
-          bottom: 95px;
-          right: 0;
-          width: 280px;
-          background: #ffffff;
-          border-radius: 16px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
-          border: 1px solid #e2e8f0;
-          overflow: hidden;
-          flex-direction: column;
-        }}
-
-        .mascot-chat-header {{
-          background: #16a34a;
-          color: white;
-          padding: 12px 16px;
-          font-weight: 600;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }}
-
-        .mascot-chat-close {{
-          background: none;
-          border: none;
-          color: white;
-          font-size: 18px;
-          cursor: pointer;
-        }}
-
-        .mascot-chat-body {{
-          padding: 16px;
-          font-size: 14px;
-          color: #334155;
-        }}
-
-        .mascot-chat-body button {{
-          width: 100%;
-          background: #f8fafc;
-          border: 1px solid #cbd5e1;
-          padding: 10px;
-          margin-top: 8px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          color: #0f172a;
-          text-align: left;
-        }}
-
-        @keyframes floatMessage {{
-          0%, 100% {{ transform: translateY(0); }}
-          50% {{ transform: translateY(-5px); }}
-        }}
-      </style>
-    </head>
-    <body>
-      <div class="mascot-widget-container">
-        <div class="mascot-chat-box" id="mascotChatBox">
-          <div class="mascot-chat-header">
-            <span>Ahorracoon 🦝</span>
-            <button class="mascot-chat-close" id="closeChatBtn">&times;</button>
-          </div>
-          <div class="mascot-chat-body">
-            <p>¡Hola! Soy tu copiloto de ahorro. ¿En qué te ayudo?</p>
-            <button onclick="alert('Navega por el menú para revisar tus metas.')">🎯 Revisar metas</button>
-            <button onclick="alert('Consulta tus cálculos y estadísticas.')">📊 Análisis financiero</button>
-          </div>
-        </div>
-
-        <div class="mascot-speech-bubble" id="speechBubble">
-          {mensaje_final}
-        </div>
-
-        <button class="mascot-trigger-btn" id="mascotBtn">
-          <img src="{config['img']}" alt="Ahorracoon" class="mascot-img">
-        </button>
-      </div>
-
-      <script>
-        const mascotBtn = document.getElementById('mascotBtn');
-        const speechBubble = document.getElementById('speechBubble');
-        const mascotChatBox = document.getElementById('mascotChatBox');
-        const closeChatBtn = document.getElementById('closeChatBtn');
-
-        function toggleChat() {{
-          const isOpen = mascotChatBox.style.display === 'flex';
-          mascotChatBox.style.display = isOpen ? 'none' : 'flex';
-          speechBubble.style.display = isOpen ? 'block' : 'none';
-        }}
-
-        mascotBtn.addEventListener('click', toggleChat);
-        speechBubble.addEventListener('click', toggleChat);
-        closeChatBtn.addEventListener('click', toggleChat);
-      </script>
-    </body>
-    </html>
-    """
-    components.html(mascot_html, height=0, width=0)
-# Ejemplo de estructura con pestañas en Streamlit
-tab_inicio, tab_calculadora, tab_ayuda, tab_metas = st.tabs(["Inicio", "Calculadora", "Ayuda", "Metas"])
-
-with tab_inicio:
-    st.title("Bienvenido a Bytepulse")
-    st.write("Panel principal de control financiero.")
-    # Ahorracoon saludando al entrar a la app
-    mostrar_mascota("saludo")
-
-with tab_calculadora:
-    st.title("Calculadora de Presupuesto")
-    # Campos de cálculo, entradas de dinero, etc.
-    # Ahorracoon con gafas y calculadora
-    mostrar_mascota("especialista")
-
-with tab_ayuda:
-    st.title("Centro de Guías")
-    st.write("Aprende cómo usar la plataforma paso a paso.")
-    # Ahorracoon con el mapa de guía
-    mostrar_mascota("guia")
-
-with tab_metas:
-    st.title("Tus Logros")
-    # Si el usuario completa una meta, puedes mostrarlo celebrando
-    mostrar_mascota("porrista", "🎉 ¡Impresionante! Vas cumpliendo tus objetivos de ahorro.")

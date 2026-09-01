@@ -83,46 +83,20 @@ def formato_cop(valor):
         return f"-${abs(val_float):,.0f}".replace(",", ".")
     return f"${val_float:,.0f}".replace(",", ".")
 
-def parsear_monto(texto_monto):
-    if not texto_monto:
-        return 0.0
-    limpio = re.sub(r"[^\d]", "", str(texto_monto))
-    if not limpio:
-        return 0.0
-    val = float(limpio)
-    return val if val < 1e11 else 0.0
-
 # ==========================================
-# INPUT CON MÁSCARA DE PUNTOS EN TIEMPO REAL
+# INPUT MONEDA NATIVO ESTABLE
 # ==========================================
 def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
-    # Inicializar el estado si no existe
-    key_val = f"val_{key_name}"
-    key_input = f"input_{key_name}"
-    
-    if key_val not in st.session_state:
-        st.session_state[key_val] = float(valor_defecto)
-
-    # Función callback que se ejecuta cada vez que el usuario escribe
-    def actualizar_formato():
-        texto_ingresado = st.session_state[key_input]
-        st.session_state[key_val] = parsear_monto(texto_ingresado)
-
-    # Texto formateado actual para mostrar en el input
-    valor_actual = st.session_state[key_val]
-    texto_formateado = f"{int(valor_actual):,}".replace(",", ".") if valor_actual > 0 else ""
-
-    # Creamos el text_input sincronizado con el callback
-    st.text_input(
+    valor = st.number_input(
         label, 
-        value=texto_formateado, 
-        key=key_input, 
-        placeholder="Ej: 1.100.000",
-        on_change=actualizar_formato
+        min_value=0.0, 
+        max_value=1e11, 
+        value=float(valor_defecto), 
+        step=1000.0,
+        key=key_name,
+        format="%.0f"
     )
-    
-    # Devolvemos siempre el valor numérico limpio listo para guardar
-    return parsear_monto(st.session_state.get(key_input, ""))
+    return float(valor)
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):

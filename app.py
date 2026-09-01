@@ -731,30 +731,22 @@ import base64
 import json
 import streamlit.components.v1 as components
 
-# 1. Coloca aquí los nombres exactos de TODAS las imágenes de expresiones que ya tienes
-archivos_imagenes = ["Fondo de saludo  eliminado.png", "porrista.png"] 
+# Cargar la imagen principal
+try:
+    with open("Fondo de saludo  eliminado.png", "rb") as img_file:
+        img_base64 = base64.b64encode(img_file.read()).decode()
+        img_src = f"data:image/png;base64,{img_base64}"
+except FileNotFoundError:
+    img_src = ""
 
-imagenes_base64 = []
-for archivo in archivos_imagenes:
-    try:
-        with open(archivo, "rb") as img_file:
-            encoded = base64.b64encode(img_file.read()).decode()
-            imagenes_base64.append(f"data:image/png;base64,{encoded}")
-    except FileNotFoundError:
-        pass
-
-img_inicial = imagenes_base64[0] if imagenes_base64 else ""
-imagenes_js = json.dumps(imagenes_base64)
-
-# 2. Widget HTML interactivo con rotación de imágenes al hacer clic
-widget_html = f"""
+widget_html = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    .mascot-widget-container {{
+    .mascot-widget-container {
       position: fixed;
       bottom: 20px;
       right: 20px;
@@ -763,8 +755,8 @@ widget_html = f"""
       flex-direction: column;
       align-items: flex-end;
       font-family: system-ui, -apple-system, sans-serif;
-    }}
-    .mascot-speech-bubble {{
+    }
+    .mascot-speech-bubble {
       background: #ffffff;
       color: #1e293b;
       padding: 12px 16px;
@@ -778,8 +770,8 @@ widget_html = f"""
       position: relative;
       animation: floatMessage 3s ease-in-out infinite;
       cursor: pointer;
-    }}
-    .mascot-speech-bubble::after {{
+    }
+    .mascot-speech-bubble::after {
       content: '';
       position: absolute;
       bottom: -8px;
@@ -789,11 +781,11 @@ widget_html = f"""
       border-color: #ffffff transparent;
       display: block;
       width: 0;
-    }}
-    .mascot-speech-bubble strong {{
+    }
+    .mascot-speech-bubble strong {
       color: #16a34a;
-    }}
-    .mascot-trigger-btn {{
+    }
+    .mascot-trigger-btn {
       background: #ffffff;
       border: 3px solid #e2e8f0;
       border-radius: 50%;
@@ -806,17 +798,17 @@ widget_html = f"""
       justify-content: center;
       align-items: center;
       transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }}
-    .mascot-trigger-btn:hover {{
+    }
+    .mascot-trigger-btn:hover {
       transform: scale(1.1) rotate(-4deg);
-    }}
-    .mascot-img {{
+    }
+    .mascot-img {
       width: 100%;
       height: 100%;
       object-fit: contain;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.1));
-    }}
-    .mascot-chat-box {{
+    }
+    .mascot-chat-box {
       display: none;
       position: absolute;
       bottom: 95px;
@@ -828,8 +820,8 @@ widget_html = f"""
       border: 1px solid #e2e8f0;
       overflow: hidden;
       flex-direction: column;
-    }}
-    .mascot-chat-header {{
+    }
+    .mascot-chat-header {
       background: #16a34a;
       color: white;
       padding: 12px 16px;
@@ -837,20 +829,20 @@ widget_html = f"""
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }}
-    .mascot-chat-close {{
+    }
+    .mascot-chat-close {
       background: none;
       border: none;
       color: white;
       font-size: 18px;
       cursor: pointer;
-    }}
-    .mascot-chat-body {{
+    }
+    .mascot-chat-body {
       padding: 16px;
       font-size: 14px;
       color: #334155;
-    }}
-    .mascot-chat-body button {{
+    }
+    .mascot-chat-body button {
       width: 100%;
       background: #f8fafc;
       border: 1px solid #cbd5e1;
@@ -862,14 +854,14 @@ widget_html = f"""
       color: #0f172a;
       text-align: left;
       transition: background 0.2s;
-    }}
-    .mascot-chat-body button:hover {{
+    }
+    .mascot-chat-body button:hover {
       background: #f1f5f9;
-    }}
-    @keyframes floatMessage {{
-      0%, 100% {{ transform: translateY(0); }}
-      50% {{ transform: translateY(-5px); }}
-    }}
+    }
+    @keyframes floatMessage {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
   </style>
 </head>
 <body>
@@ -881,7 +873,9 @@ widget_html = f"""
       </div>
       <div class="mascot-chat-body">
         <p>¡Hola! Soy tu copiloto. ¿Qué quieres hacer hoy con tus finanzas?</p>
-        <button onclick="alert('Abriendo metas...')">🎯 Ver mi meta mensual</button>
+        <a href="#tus-metas-activas" style="text-decoration: none;">
+          <button>🎯 Ver mi meta mensual</button>
+        </a>
         <button onclick="alert('Abriendo calculadora...')">🧮 Calcular un nuevo plan</button>
       </div>
     </div>
@@ -891,7 +885,7 @@ widget_html = f"""
     </div>
     
     <button class="mascot-trigger-btn" id="mascotBtn" aria-label="Abrir asistente de ahorro">
-      <img src="{img_inicial}" alt="Mapache Ahorracoon" class="mascot-img" id="mascotImg">
+      <img src="REPLACE_ME_IMG" alt="Mapache Ahorracoon" class="mascot-img">
     </button>
   </div>
 
@@ -900,22 +894,12 @@ widget_html = f"""
     const speechBubble = document.getElementById('speechBubble');
     const mascotChatBox = document.getElementById('mascotChatBox');
     const closeChatBtn = document.getElementById('closeChatBtn');
-    const mascotImg = document.getElementById('mascotImg');
 
-    const listaImagenes = {imagenes_js};
-    let indiceActual = 0;
-
-    function toggleChat() {{
+    function toggleChat() {
       const isOpen = mascotChatBox.style.display === 'flex';
       mascotChatBox.style.display = isOpen ? 'none' : 'flex';
       speechBubble.style.display = isOpen ? 'block' : 'none';
-
-      // Rotar expresión de la imagen cada vez que se hace clic (si hay más de una)
-      if (!isOpen && listaImagenes.length > 1) {{
-        indiceActual = (indiceActual + 1) % listaImagenes.length;
-        mascotImg.src = listaImagenes[indiceActual];
-      }}
-    }}
+    }
 
     mascotBtn.addEventListener('click', toggleChat);
     speechBubble.addEventListener('click', toggleChat);
@@ -925,4 +909,5 @@ widget_html = f"""
 </html>
 """
 
+widget_html = widget_html.replace("REPLACE_ME_IMG", img_src)
 components.html(widget_html, height=350, scrolling=False)

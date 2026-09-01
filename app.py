@@ -1109,3 +1109,28 @@ def mostrar_mascota(estado="saludo", mensaje_personalizado=None):
     </html>
     """
     components.html(mascot_html, height=0, width=0)
+# Ejemplo de estructura con pestañas en Streamlit
+tab_inicio, tab_calculadora, tab_ayuda, tab_metas = st.tabs(["Inicio", "Calculadora", "Ayuda", "Metas"])
+
+with tab_inicio:
+    st.title("Bienvenido a Bytepulse")
+    st.write("Panel principal de control financiero.")
+    # Ahorracoon saludando al entrar a la app
+    mostrar_mascota("saludo")
+
+with tab_calculadora:
+    st.title("Calculadora de Presupuesto")
+    # Campos de cálculo, entradas de dinero, etc.
+    # Ahorracoon con gafas y calculadora
+    mostrar_mascota("especialista")
+
+with tab_ayuda:
+    st.title("Centro de Guías")
+    st.write("Aprende cómo usar la plataforma paso a paso.")
+    # Ahorracoon con el mapa de guía
+    mostrar_mascota("guia")
+
+with tab_metas:
+    st.title("Tus Logros")
+    # Si el usuario completa una meta, puedes mostrarlo celebrando
+    mostrar_mascota("porrista", "🎉 ¡Impresionante! Vas cumpliendo tus objetivos de ahorro.")

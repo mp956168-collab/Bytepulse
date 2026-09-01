@@ -68,24 +68,34 @@ def parsear_monto(texto_monto):
     return float(limpio) if limpio else 0.0
 
 # ==========================================
-# COMPONENTE CON MÁSCARA TECLA A TECLA (JS)
+# COMPONENTE CON MÁSCARA TECLA A TECLA (ESTILO STREAMLIT)
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
     """
-    Crea un campo de texto que aplica los puntos de miles tecla a tecla en vivo y guarda el valor.
+    Crea un campo de texto con los mismos colores y estilos nativos de Streamlit.
     """
     monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
     
     html_code = f"""
-    <div style="font-family: sans-serif; margin-bottom: 10px;">
-        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 6px; font-weight: 500;">{label}</label>
+    <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
+        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
         <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
                placeholder="0" 
-               style="width: 100%; padding: 10px 14px; font-size: 16px; border: 1px solid #d3d3d3; border-radius: 8px; outline: none; box-sizing: border-box;">
+               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(49, 51, 63, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #f0f2f6; color: #31333F; transition: border-color 0.2s, background-color 0.2s;">
     </div>
     <script>
         const input = document.getElementById("{key_name}");
         
+        input.addEventListener("focus", function() {{
+            this.style.backgroundColor = "#ffffff";
+            this.style.borderColor = "#ff4b4b";
+        }});
+        
+        input.addEventListener("blur", function() {{
+            this.style.backgroundColor = "#f0f2f6";
+            this.style.borderColor = "rgba(49, 51, 63, 0.2)";
+        }});
+
         function formatear(val) {{
             let num = val.replace(/\D/g, "");
             if(!num) return "";
@@ -319,7 +329,7 @@ with tab_registro:
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # MÁSCARA DIRECTA TECLA A TECLA
+        # MÁSCARA DIRECTA MISMO ESTILO
         monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())

@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
@@ -57,9 +56,13 @@ if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
 def formato_cop(valor):
-    if valor < 0:
-        return f"-${abs(valor):,.0f}".replace(",", ".")
-    return f"${valor:,.0f}".replace(",", ".")
+    try:
+        val_float = float(valor)
+    except (ValueError, TypeError):
+        val_float = 0.0
+    if val_float < 0:
+        return f"-${abs(val_float):,.0f}".replace(",", ".")
+    return f"${val_float:,.0f}".replace(",", ".")
 
 def parsear_monto(texto_monto):
     if not texto_monto:
@@ -68,58 +71,14 @@ def parsear_monto(texto_monto):
     return float(limpio) if limpio else 0.0
 
 # ==========================================
-# COMPONENTE CON MÁSCARA TECLA A TECLA (MODO OSCURO NATIVO)
+# CAMPO DE MONEDA NATIVO SEGURO
 # ==========================================
-def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
+def input_moneda_seguro(label, key_name, valor_defecto=0):
     """
-    Crea un campo de texto alineado al Modo Oscuro nativo de Streamlit (#262730).
+    Campo de entrada numérico seguro utilizando controles nativos de Streamlit.
     """
-    monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
-    
-    html_code = f"""
-    <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
-        <label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
-        <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
-               placeholder="0" 
-               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">
-    </div>
-    <script>
-        const input = document.getElementById("{key_name}");
-        
-        input.addEventListener("focus", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "#ff4b4b";
-        }});
-        
-        input.addEventListener("blur", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "rgba(250, 250, 250, 0.2)";
-        }});
-
-        function formatear(val) {{
-            let num = val.replace(/\D/g, "");
-            if(!num) return "";
-            return new Intl.NumberFormat('es-CO').format(num);
-        }}
-
-        function enviarValor() {{
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: input.value
-            }}, '*');
-        }}
-
-        input.addEventListener("input", function(e) {{
-            let val = e.target.value;
-            e.target.value = formatear(val);
-            enviarValor();
-        }});
-
-        enviarValor();
-    </script>
-    """
-    val_string = components.html(html_code, height=75)
-    return parsear_monto(val_string)
+    val_str = st.text_input(label, value=str(valor_defecto), key=key_name, placeholder="Ej: 50000")
+    return parsear_monto(val_str)
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -328,9 +287,7 @@ with tab_registro:
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
-        
-        monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
-        
+        monto = input_moneda_seguro("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
     with col_b:
@@ -478,15 +435,15 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        monto_meta = input_moneda_tiempo_real("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
-        monto_inicial = input_moneda_tiempo_real("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
+        monto_meta = input_moneda_seguro("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
+        monto_inicial = input_moneda_seguro("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
         
-        meta_diaria_manual = input_moneda_tiempo_real("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
-        meta_semanal_manual = input_moneda_tiempo_real("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
+        meta_diaria_manual = input_moneda_seguro("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
+        meta_semanal_manual = input_moneda_seguro("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")
     
@@ -520,6 +477,15 @@ with tab_ahorro:
 
     st.divider()
     
+    col_reset_meta, _ = st.columns([2, 2])
+    with col_reset_meta:
+        if st.button("🧹 Limpiar / Reiniciar Metas Corregidas"):
+            for m in datos_user.get("metas", []):
+                m["Actual"] = 0.0
+            guardar_datos()
+            st.success("Se han reiniciado los saldos de tus metas a cero para corregir valores erróneos.")
+            st.rerun()
+
     st.subheader("Tus Metas Activas")
     if not datos_user["metas"]:
         st.info("No tienes metas registradas actualmente.")

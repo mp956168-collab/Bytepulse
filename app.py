@@ -6,6 +6,7 @@ import json
 import os
 import random
 import re
+import streamlit.components.v1 as components
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -84,35 +85,41 @@ def formato_cop(valor):
     return f"${val_float:,.0f}".replace(",", ".")
 
 # ==========================================
-# INPUT MONEDA CON MÁSCARA AUTOMÁTICA DE PUNTOS (ESTABLE)
+# INPUT MONEDA CON MÁSCARA AUTOMÁTICA EN TIEMPO REAL (JS)
 # ==========================================
 def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
     key_val = f"val_{key_name}"
     
-    # Inicializar estado si no existe
     if key_val not in st.session_state:
-        st.session_state[key_val] = f"{int(valor_defecto):,}".replace(",", ".")
+        st.session_state[key_val] = str(int(valor_defecto))
 
-    def actualizar_formato():
-        texto_ingresado = st.session_state.get(key_name, "")
-        solo_numeros = "".join(filter(str.isdigit, texto_ingresado))
-        if solo_numeros == "":
-            st.session_state[key_val] = "0"
-        else:
-            numero = int(solo_numeros)
-            st.session_state[key_val] = f"{numero:,}".replace(",", ".")
-
-    # Renderizar el campo de texto asegurando el enlace de session_state limpio
-    st.text_input(
-        label, 
-        value=st.session_state[key_val], 
-        key=key_name,
-        on_change=actualizar_formato
-    )
+    # Componente visual con JavaScript puro inyectado para formatear al vuelo
+    component_html = f"""
+    <div style="font-family: sans-serif; margin-bottom: 1rem;">
+        <label style="font-size: 14px; color: #fafafa; display: block; margin-bottom: 6px;">{label}</label>
+        <input type="text" id="input_{key_name}" value="{st.session_state[key_val]}" 
+        style="width: 100%; padding: 8px 12px; background-color: #262730; color: white; border: 1px solid #41424C; border-radius: 4px; font-size: 16px;"
+        oninput="
+            let val = this.value.replace(/\\D/g, '');
+            if(val === '') {{
+                this.value = '';
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '0'}}, '*');
+            }} else {{
+                let num = parseInt(val, 10);
+                let formatted = num.toLocaleString('de-DE'); // Formato con puntos de miles estilo alemán/colombiano
+                this.value = formatted;
+                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: val}}, '*');
+            }}
+        ">
+    </div>
+    """
     
-    # Sincronizar por si el usuario editó directamente sin disparar on_change todavía
-    texto_actual = st.session_state.get(key_name, st.session_state[key_val])
-    solo_numeros = "".join(filter(str.isdigit, texto_actual))
+    # Renderizamos el componente HTML interactivo y respaldamos con st.text_input estándar por seguridad de estado
+    val_str = components.html(component_html, height=75)
+    
+    # Capturamos el valor numérico limpio desde el estado de sesión secundario si existe
+    raw_input = st.text_input(label, value=f"{int(valor_defecto):,}".replace(",", "."), key=key_name)
+    solo_numeros = "".join(filter(str.isdigit, raw_input))
     
     try:
         return float(solo_numeros) if solo_numeros else 0.0

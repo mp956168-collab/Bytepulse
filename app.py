@@ -6,14 +6,6 @@ import json
 import os
 import random
 import re
-import io
-
-# Librerías externas para exportación formal a Excel y PDF
-import openpyxl
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -68,51 +60,17 @@ def formato_cop(valor):
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
-# --- FUNCIONES DE EXPORTACIÓN ---
-def generar_excel(dataframe, titulo_hoja="Transacciones"):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        dataframe.to_excel(writer, index=False, sheet_name=titulo_hoja)
-    return output.getvalue()
-
-def generar_pdf_tabla(dataframe, titulo_documento="Reporte Financiero"):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    elements = []
-    
-    styles = getSampleStyleSheet()
-    elements.append(Paragraph(f"<b>{titulo_documento}</b>", styles['Title']))
-    elements.append(Spacer(1, 12))
-    
-    # Convertir DataFrame a lista de listas para la tabla
-    data = [dataframe.columns.tolist()] + dataframe.values.tolist()
-    
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-    ]))
-    
-    elements.append(table)
-    doc.build(elements)
-    return buffer.getvalue()
+def convertir_df_a_csv(dataframe):
+    return dataframe.to_csv(index=False).encode('utf-8-sig')
 
 # ==========================================
-# 2. AUTENTICACIÓN Y REGISTRO (DISEÑO NORMAL)
+# 2. AUTENTICACIÓN Y REGISTRO
 # ==========================================
 if st.session_state.usuario_actual is None:
     st.title("Bytepulse 📈")
     st.caption("Gestión Financiera Multi-Usuario por **Quantumsoft**")
     st.divider()
 
-    # Formulario Principal de Login centrado
     col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
     
     with col_c2:
@@ -133,7 +91,6 @@ if st.session_state.usuario_actual is None:
                         st.error("Usuario o contraseña incorrectos.")
 
             st.write("")
-            # Opción de cambiar a Registro justo debajo del inicio de sesión
             col_b1, col_b2 = st.columns([1, 1])
             with col_b1:
                 if st.button("📝 ¿No tienes cuenta? Regístrate aquí"):
@@ -158,7 +115,6 @@ if st.session_state.usuario_actual is None:
                         else:
                             st.error("El usuario ingresado no existe.")
         else:
-            # Vista de Registro
             st.subheader("📝 Crear Nueva Cuenta")
             with st.form("form_registro"):
                 user_reg = st.text_input("Nuevo Usuario").strip().lower()
@@ -360,28 +316,18 @@ with tab_registro:
 
     st.divider()
     
-    col_hist_head, col_hist_excel, col_hist_pdf, col_hist_del = st.columns([2, 1.2, 1.2, 1.6])
+    col_hist_head, col_hist_csv, col_hist_del = st.columns([2.5, 1.5, 1.5])
     with col_hist_head:
         st.subheader("Historial de Transacciones")
         
-    with col_hist_excel:
+    with col_hist_csv:
         if not df.empty:
-            bytes_excel = generar_excel(df, titulo_hoja="Transacciones")
+            csv_bytes = convertir_df_a_csv(df)
             st.download_button(
-                label="📊 Exportar Excel",
-                data=bytes_excel,
-                file_name=f"Reporte_Financiero_{user}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    with col_hist_pdf:
-        if not df.empty:
-            bytes_pdf = generar_pdf_tabla(df, titulo_documento=f"Reporte Financiero - Usuario: {user.capitalize()}")
-            st.download_button(
-                label="📄 Exportar PDF",
-                data=bytes_pdf,
-                file_name=f"Reporte_Financiero_{user}.pdf",
-                mime="application/pdf"
+                label="📊 Exportar Tabla (CSV/Excel)",
+                data=csv_bytes,
+                file_name=f"Reporte_Financiero_{user}.csv",
+                mime="text/csv"
             )
 
     with col_hist_del:
@@ -588,7 +534,7 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        col_cred_head, col_cred_excel, col_cred_pdf = st.columns([3, 1, 1])
+        col_cred_head, col_cred_csv = st.columns([3.5, 1.5])
         with col_cred_head:
             st.subheader("🔑 Directorio de Cuentas y Credenciales")
         
@@ -604,24 +550,14 @@ if es_admin and tab_admin is not None:
             
         df_credenciales = pd.DataFrame(datos_credenciales)
         
-        with col_cred_excel:
+        with col_cred_csv:
             if not df_credenciales.empty:
-                b_excel_admin = generar_excel(df_credenciales, titulo_hoja="Usuarios")
+                csv_admin = convertir_df_a_csv(df_credenciales)
                 st.download_button(
-                    label="📊 Excel Usuarios",
-                    data=b_excel_admin,
-                    file_name="Directorio_Usuarios.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
-        with col_cred_pdf:
-            if not df_credenciales.empty:
-                b_pdf_admin = generar_pdf_tabla(df_credenciales, titulo_documento="Directorio de Usuarios")
-                st.download_button(
-                    label="📄 PDF Usuarios",
-                    data=b_pdf_admin,
-                    file_name="Directorio_Usuarios.pdf",
-                    mime="application/pdf"
+                    label="📊 Exportar Usuarios (CSV)",
+                    data=csv_admin,
+                    file_name="Directorio_Usuarios.csv",
+                    mime="text/csv"
                 )
 
         st.dataframe(df_credenciales, use_container_width=True)

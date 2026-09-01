@@ -6,7 +6,6 @@ import json
 import os
 import random
 import re
-import streamlit.components.v1 as components
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -63,57 +62,11 @@ def formato_cop(valor):
     return f"${valor:,.0f}".replace(",", ".")
 
 def parsear_monto(texto_monto):
-    """Extrae únicamente los dígitos para convertir a número."""
+    """Extrae únicamente los dígitos para convertir a número dinámicamente."""
     if not texto_monto:
         return 0.0
     limpio = re.sub(r"[^\d]", "", str(texto_monto))
     return float(limpio) if limpio else 0.0
-
-# --- COMPONENTE JAVASCRIPT: FORMATEO EN VIVO TECLA POR TECLA ---
-def autodesformatear_inputs_js():
-    """Inyecta JavaScript para interceptar la escritura y poner puntos de miles en vivo."""
-    js_code = """
-    <script>
-    function aplicarMascaraPuntos() {
-        const doc = window.parent.document;
-        const inputs = doc.querySelectorAll('input[type="text"]');
-        
-        inputs.forEach(input => {
-            if (input.dataset.maskApplied) return;
-            
-            // Marcar como procesado
-            input.dataset.maskApplied = "true";
-            
-            input.addEventListener('input', function(e) {
-                // Si el label contiene palabras clave de montos/moneda
-                const label = input.closest('[data-testid="stTextInput"]');
-                if (label && (label.innerText.includes('Monto') || label.innerText.includes('COP') || label.innerText.includes('Sugerida'))) {
-                    let cursorPosition = this.selectionStart;
-                    let originalLength = this.value.length;
-                    
-                    // Limpiar todo lo que no sea dígito
-                    let cleanVal = this.value.replace(/[^0-9]/g, '');
-                    
-                    if (cleanVal) {
-                        // Formatear con puntos de miles
-                        let formatted = parseInt(cleanVal, 10).toLocaleString('es-CO');
-                        this.value = formatted;
-                    } else {
-                        this.value = '';
-                    }
-                }
-            });
-        });
-    }
-    
-    // Ejecutar periódicamente para detectar nuevos campos cargados
-    setInterval(aplicarMascaraPuntos, 300);
-    </script>
-    """
-    components.html(js_code, height=0, width=0)
-
-# Inyectar el script en vivo
-autodesformatear_inputs_js()
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -323,9 +276,10 @@ with tab_registro:
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # Campo con formateo JS en tiempo real
-        monto_input_raw = st.text_input("Monto (COP $)", value="50.000")
+        # Entrada de texto flexible para montos con confirmación en COP
+        monto_input_raw = st.text_input("Monto (COP $)", value="50.000", help="Puedes ingresar valores con o sin puntos (ej: 50000 o 50.000)")
         monto = parsear_monto(monto_input_raw)
+        st.caption(f"💵 **Confirmación de Monto:** `{formato_cop(monto)}`")
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
@@ -459,7 +413,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO CON FORMATEO JS EN VIVO
+# 6. PLANES DE AHORRO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -475,12 +429,14 @@ with tab_ahorro:
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
         
-        # Al escribir aquí, los puntos de miles aparecen instantáneamente sin "Press Enter"
-        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000")
+        # Entrada de texto con interpretación automática de números grandes
+        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000", help="Escribe libremente con o sin puntos (ej: 505000 o 505.000)")
         monto_meta = parsear_monto(monto_meta_raw)
+        st.caption(f"💵 **Confirmación Meta:** `{formato_cop(monto_meta)}`")
         
         monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
         monto_inicial = parsear_monto(monto_inicial_raw)
+        st.caption(f"💵 **Confirmación Inicial:** `{formato_cop(monto_inicial)}`")
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
@@ -717,23 +673,18 @@ if es_admin and tab_admin is not None:
             df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
             metas_sel = datos_sel.get("metas", [])
             
+            st.markdown(f"#### 🔍 Auditoría en vivo del usuario: `{usuario_seleccionado}`")
             if not df_sel.empty:
                 u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
-                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (df_sel['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
+                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto')]['Monto'].sum())
                 u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
-                u_ahorros = float(df_sel[df_sel['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
-                u_gastos_ahorros = float(df_sel[df_sel['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
                 
-                u_fondo_ahorro = max(0.0, u_ahorros - u_gastos_ahorros)
-                u_balance = u_ingresos - (u_gastos + u_deudas) - u_fondo_ahorro
+                aud1, aud2, aud3, aud4 = st.columns(4)
+                aud1.metric("Ingresos", formato_cop(u_ingresos))
+                aud2.metric("Gastos", formato_cop(u_gastos))
+                aud3.metric("Deudas", formato_cop(u_deudas))
+                aud4.metric("Metas Registradas", len(metas_sel))
+                
+                st.dataframe(df_sel, use_container_width=True)
             else:
-                u_ingresos, u_gastos, u_deudas, u_fondo_ahorro, u_balance = 0.0, 0.0, 0.0, 0.0, 0.0
-
-            st.markdown(f"#### 📊 Informe de Cuentas: `{usuario_seleccionado}`")
-            st.info(f"🔑 **Contraseña:** `{datos_sel.get('password')}` | 📞 **Teléfono:** `+57 {datos_sel.get('telefono', 'N/A')}`")
-            
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Ingresos", formato_cop(u_ingresos))
-            m2.metric("Gastos Corrientes", formato_cop(u_gastos + u_deudas))
-            m3.metric("Fondo de Ahorro", formato_cop(u_fondo_ahorro))
-            m4.metric("Balance Libre", formato_cop(u_balance))
+                st.info("Este usuario no tiene transacciones registradas.")

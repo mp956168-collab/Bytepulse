@@ -727,13 +727,14 @@ if es_admin and tab_admin is not None:
                 st.dataframe(df_sel, use_container_width=True)
             else:
                 st.info("Este usuario no tiene transacciones registradas.")
+import base64
 import streamlit.components.v1 as components
 
-# Leer el archivo HTML de la mascota
-with open("mascota.html", "r", encoding="utf-8") as f:
-    mascota_html = f.read()
+# Leer la imagen local y convertirla a Base64
+with open("porrista.png", "rb") as img_file:
+    img_base64 = base64.b64encode(img_file.read()).decode()
 
-# Envolver el contenido con CSS para fijarlo en la esquina inferior derecha
+# Estilos y estructura de la mascota flotante
 floating_wrapper = f"""
 <style>
 .floating-mascot {{
@@ -741,13 +742,37 @@ floating_wrapper = f"""
     bottom: 20px;
     right: 20px;
     z-index: 999999;
-    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}}
+.chat-bubble {{
+    background: white;
+    padding: 12px 18px;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    margin-bottom: 10px;
+    font-family: sans-serif;
+    font-size: 14px;
+    color: #333;
+    border: 1px solid #e0e0e0;
+}}
+.mascot-img {{
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    background: white;
 }}
 </style>
 <div class="floating-mascot">
-    {mascota_html}
+    <div class="chat-bubble">
+        👋 ¡Hola! ¿Listo para <span style="color: green; font-weight: bold;">ahorrar</span> hoy?
+    </div>
+    <img src="data:image/png;base64,{img_base64}" class="mascot-img">
 </div>
 """
 
-# Renderizar el componente flotante
-components.html(floating_wrapper, height=180, scrolling=False)
+# Renderizar el componente al final de la página
+components.html(floating_wrapper, height=220, scrolling=False)

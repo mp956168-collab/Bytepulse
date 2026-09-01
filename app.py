@@ -734,7 +734,7 @@ import streamlit.components.v1 as components
 with open("porrista.png", "rb") as img_file:
     img_base64 = base64.b64encode(img_file.read()).decode()
 
-# Estilos y estructura de la mascota flotante
+# Componente interactivo con JavaScript
 floating_wrapper = f"""
 <style>
 .floating-mascot {{
@@ -745,6 +745,7 @@ floating_wrapper = f"""
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    cursor: pointer;
 }}
 .chat-bubble {{
     background: white;
@@ -756,6 +757,7 @@ floating_wrapper = f"""
     font-size: 14px;
     color: #333;
     border: 1px solid #e0e0e0;
+    transition: all 0.3s ease;
 }}
 .mascot-img {{
     width: 90px;
@@ -764,15 +766,35 @@ floating_wrapper = f"""
     object-fit: cover;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     background: white;
+    transition: transform 0.2s ease;
+}}
+.mascot-img:hover {{
+    transform: scale(1.08);
 }}
 </style>
-<div class="floating-mascot">
-    <div class="chat-bubble">
+
+<div class="floating-mascot" onclick="interactuarMascota()">
+    <div class="chat-bubble" id="bubble-text">
         👋 ¡Hola! ¿Listo para <span style="color: green; font-weight: bold;">ahorrar</span> hoy?
     </div>
     <img src="data:image/png;base64,{img_base64}" class="mascot-img">
 </div>
+
+<script>
+const frases = [
+    "💡 ¡Revisa tus gastos hormiga de la semana!",
+    "🎯 Vas por buen camino con tu meta de ahorro.",
+    "🚀 ¡Imagina todo lo que puedes lograr este mes!",
+    "✨ ¡Registra cada movimiento para tener el control total!",
+    "👋 ¡Hola! ¿Listo para ahorrar hoy?"
+];
+
+function interactuarMascota() {{
+    const bubble = document.getElementById("bubble-text");
+    const randomIndex = Math.floor(Math.random() * frases.length);
+    bubble.innerHTML = frases[randomIndex];
+}}
+</script>
 """
 
-# Renderizar el componente al final de la página
 components.html(floating_wrapper, height=220, scrolling=False)

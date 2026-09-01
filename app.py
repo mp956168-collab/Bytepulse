@@ -6,6 +6,14 @@ import json
 import os
 import random
 import re
+import io
+
+# Librerías externas para exportación formal a Excel y PDF
+import openpyxl
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -27,7 +35,7 @@ MENSAJES_MOTIVACIONALES = [
 
 def cargar_datos():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {
         "admin": {
@@ -39,8 +47,8 @@ def cargar_datos():
     }
 
 def guardar_datos():
-    with open(DB_FILE, "w") as f:
-        json.dump(st.session_state.db_usuarios, f, indent=4)
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(st.session_state.db_usuarios, f, indent=4, ensure_ascii=False)
 
 def validar_telefono_colombia(telefono):
     patron = r"^3\d{9}$"
@@ -52,80 +60,134 @@ if 'db_usuarios' not in st.session_state:
 if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
+if 'mostrar_registro' not in st.session_state:
+    st.session_state.mostrar_registro = False
+
 def formato_cop(valor):
     if valor < 0:
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
+# --- FUNCIONES DE EXPORTACIÓN ---
+def generar_excel(dataframe, titulo_hoja="Transacciones"):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        dataframe.to_excel(writer, index=False, sheet_name=titulo_hoja)
+    return output.getvalue()
+
+def generar_pdf_tabla(dataframe, titulo_documento="Reporte Financiero"):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    elements.append(Paragraph(f"<b>{titulo_documento}</b>", styles['Title']))
+    elements.append(Spacer(1, 12))
+    
+    # Convertir DataFrame a lista de listas para la tabla
+    data = [dataframe.columns.tolist()] + dataframe.values.tolist()
+    
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+    ]))
+    
+    elements.append(table)
+    doc.build(elements)
+    return buffer.getvalue()
+
 # ==========================================
-# 2. AUTENTICACIÓN Y RECUPERACIÓN DE CLAVE
+# 2. AUTENTICACIÓN Y REGISTRO (DISEÑO NORMAL)
 # ==========================================
 if st.session_state.usuario_actual is None:
     st.title("Bytepulse 📈")
     st.caption("Gestión Financiera Multi-Usuario por **Quantumsoft**")
     st.divider()
 
-    col_login, col_reg = st.columns(2)
+    # Formulario Principal de Login centrado
+    col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
+    
+    with col_c2:
+        if not st.session_state.mostrar_registro:
+            st.subheader("🔑 Iniciar Sesión")
+            with st.form("form_login"):
+                user_login = st.text_input("Usuario").strip().lower()
+                pass_login = st.text_input("Contraseña", type="password")
+                btn_login = st.form_submit_button("Entrar", use_container_width=True)
 
-    with col_login:
-        st.subheader("🔑 Iniciar Sesión (Usuario Ya Existente)")
-        with st.form("form_login"):
-            user_login = st.text_input("Usuario").strip().lower()
-            pass_login = st.text_input("Contraseña", type="password")
-            btn_login = st.form_submit_button("Entrar")
-
-            if btn_login:
-                db = st.session_state.db_usuarios
-                if user_login in db and db[user_login]["password"] == pass_login:
-                    st.session_state.usuario_actual = user_login
-                    st.success(f"¡Bienvenido {user_login}!")
-                    st.rerun()
-                else:
-                    st.error("Usuario o contraseña incorrectos.")
-
-        st.write("")
-        with st.expander("📲 ¿Olvidaste tu contraseña? (Recuperar por Teléfono)"):
-            with st.form("form_recuperar"):
-                u_recuperar = st.text_input("Ingresa tu Usuario").strip().lower()
-                tel_recuperar = st.text_input("Número de Teléfono Registrado (Colombia)", placeholder="Ej: 3001234567").strip()
-                btn_recuperar = st.form_submit_button("Enviar Contraseña al Número")
-
-                if btn_recuperar:
+                if btn_login:
                     db = st.session_state.db_usuarios
-                    if u_recuperar in db:
-                        tel_guardado = db[u_recuperar].get("telefono", "")
-                        if tel_recuperar == tel_guardado:
-                            pass_encontrada = db[u_recuperar]["password"]
-                            st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
-                        else:
-                            st.error("El número telefónico no coincide con el registrado para este usuario.")
+                    if user_login in db and db[user_login]["password"] == pass_login:
+                        st.session_state.usuario_actual = user_login
+                        st.success(f"¡Bienvenido {user_login}!")
+                        st.rerun()
                     else:
-                        st.error("El usuario ingresado no existe en el sistema.")
+                        st.error("Usuario o contraseña incorrectos.")
 
-    with col_reg:
-        st.subheader("📝 Registrar Nuevo Cliente")
-        with st.form("form_registro"):
-            user_reg = st.text_input("Nuevo Usuario").strip().lower()
-            pass_reg = st.text_input("Nueva Contraseña", type="password")
-            tel_reg = st.text_input("Número Telefónico (Colombia +57)", placeholder="Ej: 3101234567").strip()
-            btn_reg = st.form_submit_button("Crear Cuenta")
+            st.write("")
+            # Opción de cambiar a Registro justo debajo del inicio de sesión
+            col_b1, col_b2 = st.columns([1, 1])
+            with col_b1:
+                if st.button("📝 ¿No tienes cuenta? Regístrate aquí"):
+                    st.session_state.mostrar_registro = True
+                    st.rerun()
+                    
+            with st.expander("📲 ¿Olvidaste tu contraseña? (Recuperar por Teléfono)"):
+                with st.form("form_recuperar"):
+                    u_recuperar = st.text_input("Ingresa tu Usuario").strip().lower()
+                    tel_recuperar = st.text_input("Número de Teléfono Registrado (Colombia)", placeholder="Ej: 3001234567").strip()
+                    btn_recuperar = st.form_submit_button("Enviar Contraseña al Número")
 
-            if btn_reg:
-                if not user_reg or not pass_reg or not tel_reg:
-                    st.warning("Por favor completa todos los campos requeridos.")
-                elif user_reg in st.session_state.db_usuarios:
-                    st.error("El usuario ya existe. Intenta con otro nombre.")
-                elif not validar_telefono_colombia(tel_reg):
-                    st.error("El número telefónico debe ser un celular colombiano de 10 dígitos que empiece por 3 (Ej: 3001234567).")
-                else:
-                    st.session_state.db_usuarios[user_reg] = {
-                        "password": pass_reg,
-                        "telefono": tel_reg,
-                        "transacciones": [],
-                        "metas": []
-                    }
-                    guardar_datos()
-                    st.success("Cuenta creada exitosamente. Ya puedes iniciar sesión.")
+                    if btn_recuperar:
+                        db = st.session_state.db_usuarios
+                        if u_recuperar in db:
+                            tel_guardado = db[u_recuperar].get("telefono", "")
+                            if tel_recuperar == tel_guardado:
+                                pass_encontrada = db[u_recuperar]["password"]
+                                st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
+                            else:
+                                st.error("El número telefónico no coincide con el registrado.")
+                        else:
+                            st.error("El usuario ingresado no existe.")
+        else:
+            # Vista de Registro
+            st.subheader("📝 Crear Nueva Cuenta")
+            with st.form("form_registro"):
+                user_reg = st.text_input("Nuevo Usuario").strip().lower()
+                pass_reg = st.text_input("Nueva Contraseña", type="password")
+                tel_reg = st.text_input("Número Telefónico (Colombia +57)", placeholder="Ej: 3101234567").strip()
+                btn_reg = st.form_submit_button("Registrarse", use_container_width=True)
+
+                if btn_reg:
+                    if not user_reg or not pass_reg or not tel_reg:
+                        st.warning("Por favor completa todos los campos requeridos.")
+                    elif user_reg in st.session_state.db_usuarios:
+                        st.error("El usuario ya existe. Intenta con otro nombre.")
+                    elif not validar_telefono_colombia(tel_reg):
+                        st.error("El número telefónico debe ser un celular colombiano de 10 dígitos que empiece por 3.")
+                    else:
+                        st.session_state.db_usuarios[user_reg] = {
+                            "password": pass_reg,
+                            "telefono": tel_reg,
+                            "transacciones": [],
+                            "metas": []
+                        }
+                        guardar_datos()
+                        st.success("Cuenta creada exitosamente. Ya puedes iniciar sesión.")
+                        st.session_state.mostrar_registro = False
+                        st.rerun()
+
+            if st.button("⬅️ Volver al Inicio de Sesión"):
+                st.session_state.mostrar_registro = False
+                st.rerun()
 
     st.stop()
 
@@ -221,7 +283,7 @@ with tab_dashboard:
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
     
-    nombres_metas = [m["Meta"] for m in datos_user["metas"]]
+    nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
     
     with st.form("form_transaccion", clear_on_submit=True):
         col_a, col_b = st.columns(2)
@@ -229,7 +291,7 @@ with tab_registro:
         with col_a:
             tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
             monto = st.number_input("Monto (COP $)", min_value=1000.0, step=50000.0, format="%.0f")
-            fecha = st.date_input("Fecha de la Transacción", datetime.now())
+            fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
             
         with col_b:
             categoria = st.selectbox("Categoría", [
@@ -298,18 +360,28 @@ with tab_registro:
 
     st.divider()
     
-    col_hist_head, col_hist_export, col_hist_del = st.columns([2.5, 1.5, 1.5])
+    col_hist_head, col_hist_excel, col_hist_pdf, col_hist_del = st.columns([2, 1.2, 1.2, 1.6])
     with col_hist_head:
         st.subheader("Historial de Transacciones")
         
-    with col_hist_export:
+    with col_hist_excel:
         if not df.empty:
-            csv_data = df.to_csv(index=False).encode('utf-8-sig')
+            bytes_excel = generar_excel(df, titulo_hoja="Transacciones")
             st.download_button(
-                label="📥 Descargar Reporte",
-                data=csv_data,
-                file_name=f"Reporte_Financiero_{user}.csv",
-                mime="text/csv"
+                label="📊 Exportar Excel",
+                data=bytes_excel,
+                file_name=f"Reporte_Financiero_{user}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    with col_hist_pdf:
+        if not df.empty:
+            bytes_pdf = generar_pdf_tabla(df, titulo_documento=f"Reporte Financiero - Usuario: {user.capitalize()}")
+            st.download_button(
+                label="📄 Exportar PDF",
+                data=bytes_pdf,
+                file_name=f"Reporte_Financiero_{user}.pdf",
+                mime="application/pdf"
             )
 
     with col_hist_del:
@@ -323,6 +395,7 @@ with tab_registro:
     if not datos_user["transacciones"]:
         st.info("No tienes transacciones guardadas.")
     else:
+        index_to_delete = None
         for idx, row in enumerate(datos_user["transacciones"]):
             c_fecha, c_tipo, c_cat, c_monto, c_meta, c_del = st.columns([1.5, 1.2, 1.8, 1.5, 2, 1])
             c_fecha.write(row['Fecha'])
@@ -332,16 +405,19 @@ with tab_registro:
             c_meta.write(f"🎯 {row.get('Meta_Asociada', 'Ninguna')}")
             
             if c_del.button("🗑️", key=f"del_tx_{idx}"):
-                tx_eliminada = datos_user["transacciones"].pop(idx)
-                if tx_eliminada.get("Meta_Asociada") != "Ninguna":
-                    for m in datos_user["metas"]:
-                        if m["Meta"] == tx_eliminada["Meta_Asociada"]:
-                            if tx_eliminada.get("Tipo") in ["Ahorro / Inversión", "Ingreso"]:
-                                m["Actual"] = float(m.get("Actual", 0.0)) - tx_eliminada["Monto"]
-                            elif tx_eliminada.get("Tipo") in ["Gasto", "Deuda"]:
-                                m["Actual"] = float(m.get("Actual", 0.0)) + tx_eliminada["Monto"]
-                guardar_datos()
-                st.rerun()
+                index_to_delete = idx
+        
+        if index_to_delete is not None:
+            tx_eliminada = datos_user["transacciones"].pop(index_to_delete)
+            if tx_eliminada.get("Meta_Asociada") != "Ninguna":
+                for m in datos_user["metas"]:
+                    if m["Meta"] == tx_eliminada["Meta_Asociada"]:
+                        if tx_eliminada.get("Tipo") in ["Ahorro / Inversión", "Ingreso"]:
+                            m["Actual"] = float(m.get("Actual", 0.0)) - tx_eliminada["Monto"]
+                        elif tx_eliminada.get("Tipo") in ["Gasto", "Deuda"]:
+                            m["Actual"] = float(m.get("Actual", 0.0)) + tx_eliminada["Monto"]
+            guardar_datos()
+            st.rerun()
 
 # ==========================================
 # 6. PLANES DE AHORRO
@@ -395,6 +471,7 @@ with tab_ahorro:
     if not datos_user["metas"]:
         st.info("No tienes metas registradas actualmente.")
     else:
+        meta_to_delete = None
         for idx, meta in enumerate(datos_user["metas"]):
             monto_objetivo = float(meta.get("Objetivo", 1.0))
             monto_actual = float(meta.get("Actual", 0.0))
@@ -423,11 +500,14 @@ with tab_ahorro:
             col_m_details2.caption(f"📌 **Cuota Mensual Requerida:** {formato_cop(cuota_mensual)} / mes")
             
             if col_m_btn.button("🗑️ Eliminar", key=f"btn_del_meta_{idx}"):
-                datos_user["metas"].pop(idx)
-                guardar_datos()
-                st.rerun()
+                meta_to_delete = idx
                 
             st.divider()
+
+        if meta_to_delete is not None:
+            datos_user["metas"].pop(meta_to_delete)
+            guardar_datos()
+            st.rerun()
 
 # ==========================================
 # 7. CONFIGURACIÓN Y CAMBIO DE CONTRASEÑA
@@ -479,7 +559,7 @@ if es_admin and tab_admin is not None:
             
             if btn_guardar_tel_admin:
                 if not validar_telefono_colombia(nuevo_tel_admin):
-                    st.error("El teléfono debe ser un celular colombiano de 10 dígitos que empiece por 3 (Ej: 3001234567).")
+                    st.error("El teléfono debe ser un celular colombiano de 10 dígitos que empiece por 3.")
                 else:
                     db_global["admin"]["telefono"] = nuevo_tel_admin
                     guardar_datos()
@@ -508,7 +588,10 @@ if es_admin and tab_admin is not None:
         
         st.divider()
         
-        st.subheader("🔑 Directorio de Cuentas y Credenciales")
+        col_cred_head, col_cred_excel, col_cred_pdf = st.columns([3, 1, 1])
+        with col_cred_head:
+            st.subheader("🔑 Directorio de Cuentas y Credenciales")
+        
         datos_credenciales = []
         for u, d in db_global.items():
             datos_credenciales.append({
@@ -520,6 +603,27 @@ if es_admin and tab_admin is not None:
             })
             
         df_credenciales = pd.DataFrame(datos_credenciales)
+        
+        with col_cred_excel:
+            if not df_credenciales.empty:
+                b_excel_admin = generar_excel(df_credenciales, titulo_hoja="Usuarios")
+                st.download_button(
+                    label="📊 Excel Usuarios",
+                    data=b_excel_admin,
+                    file_name="Directorio_Usuarios.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+        with col_cred_pdf:
+            if not df_credenciales.empty:
+                b_pdf_admin = generar_pdf_tabla(df_credenciales, titulo_documento="Directorio de Usuarios")
+                st.download_button(
+                    label="📄 PDF Usuarios",
+                    data=b_pdf_admin,
+                    file_name="Directorio_Usuarios.pdf",
+                    mime="application/pdf"
+                )
+
         st.dataframe(df_credenciales, use_container_width=True)
         
         st.divider()

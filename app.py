@@ -728,73 +728,41 @@ if es_admin and tab_admin is not None:
             else:
                 st.info("Este usuario no tiene transacciones registradas.")
 import base64
-import streamlit.components.v1 as components
 
-# Leer la imagen local y convertirla a Base64
-with open("porrista.png", "rb") as img_file:
-    img_base64 = base64.b64encode(img_file.read()).decode()
+# --- SECCIÓN DE CHAT CON LA MASCOTA ---
+st.markdown("---")
+st.subheader("💬 Habla con tu mascota ahorradora")
 
-# Componente interactivo con JavaScript
-floating_wrapper = f"""
-<style>
-.floating-mascot {{
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 999999;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    cursor: pointer;
-}}
-.chat-bubble {{
-    background: white;
-    padding: 12px 18px;
-    border-radius: 15px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    margin-bottom: 10px;
-    font-family: sans-serif;
-    font-size: 14px;
-    color: #333;
-    border: 1px solid #e0e0e0;
-    transition: all 0.3s ease;
-}}
-.mascot-img {{
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    object-fit: cover;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    background: white;
-    transition: transform 0.2s ease;
-}}
-.mascot-img:hover {{
-    transform: scale(1.08);
-}}
-</style>
+# Inicializar historial de conversación si no existe
+if "mensajes_mascota" not in st.session_state:
+    st.session_state.mensajes_mascota = [
+        {"origen": "mascota", "texto": "¡Hola! Pregúntame sobre tus finanzas, ahorros o consejos para hoy."}
+    ]
 
-<div class="floating-mascot" onclick="interactuarMascota()">
-    <div class="chat-bubble" id="bubble-text">
-        👋 ¡Hola! ¿Listo para <span style="color: green; font-weight: bold;">ahorrar</span> hoy?
-    </div>
-    <img src="data:image/png;base64,{img_base64}" class="mascot-img">
-</div>
+# Mostrar historial de mensajes
+for msg in st.session_state.mensajes_mascota:
+    if msg["origen"] == "mascota":
+        st.info(f"🦝 **Mascota:** {msg['texto']}")
+    else:
+        st.success(f"👤 **Tú:** {msg['texto']}")
 
-<script>
-const frases = [
-    "💡 ¡Revisa tus gastos hormiga de la semana!",
-    "🎯 Vas por buen camino con tu meta de ahorro.",
-    "🚀 ¡Imagina todo lo que puedes lograr este mes!",
-    "✨ ¡Registra cada movimiento para tener el control total!",
-    "👋 ¡Hola! ¿Listo para ahorrar hoy?"
-];
+# Campo de entrada para hacer la pregunta
+pregunta_usuario = st.text_input("Escribe tu pregunta aquí...", key="input_pregunta")
 
-function interactuarMascota() {{
-    const bubble = document.getElementById("bubble-text");
-    const randomIndex = Math.floor(Math.random() * frases.length);
-    bubble.innerHTML = frases[randomIndex];
-}}
-</script>
-"""
-
-components.html(floating_wrapper, height=220, scrolling=False)
+if st.button("Enviar pregunta"):
+    if pregunta_usuario.strip():
+        # Guardar pregunta del usuario
+        st.session_state.mensajes_mascota.append({"origen": "usuario", "texto": pregunta_usuario})
+        
+        # Generar una respuesta basada en la pregunta (puedes conectar esto con tu lógica o IA)
+        pregunta_lower = pregunta_usuario.lower()
+        if "ahorrar" in pregunta_lower:
+            respuesta = "Te sugiero apartar al menos el 10% de tus ingresos mensuales apenas los recibas."
+        elif "gasto" in pregunta_lower:
+            respuesta = "Recuerda revisar los reportes de gastos que calculamos en la aplicación para identificar fugas de dinero."
+        else:
+            respuesta = f"Interesante pregunta sobre '{pregunta_usuario}'. ¡Sigue registrando tus datos para mantener el control financiero!"
+            
+        # Guardar respuesta de la mascota
+        st.session_state.mensajes_mascota.append({"origen": "mascota", "texto": respuesta})
+        st.rerun()

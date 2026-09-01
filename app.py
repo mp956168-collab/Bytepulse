@@ -68,32 +68,32 @@ def parsear_monto(texto_monto):
     return float(limpio) if limpio else 0.0
 
 # ==========================================
-# COMPONENTE CON MÁSCARA TECLA A TECLA (ESTILO STREAMLIT)
+# COMPONENTE CON MÁSCARA TECLA A TECLA (MODO OSCURO NATIVO)
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
     """
-    Crea un campo de texto con los mismos colores y estilos nativos de Streamlit.
+    Crea un campo de texto alineado al Modo Oscuro nativo de Streamlit (#262730).
     """
     monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
     
     html_code = f"""
     <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
-        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
+        <label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
         <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
                placeholder="0" 
-               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(49, 51, 63, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #f0f2f6; color: #31333F; transition: border-color 0.2s, background-color 0.2s;">
+               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">
     </div>
     <script>
         const input = document.getElementById("{key_name}");
         
         input.addEventListener("focus", function() {{
-            this.style.backgroundColor = "#ffffff";
+            this.style.backgroundColor = "#262730";
             this.style.borderColor = "#ff4b4b";
         }});
         
         input.addEventListener("blur", function() {{
-            this.style.backgroundColor = "#f0f2f6";
-            this.style.borderColor = "rgba(49, 51, 63, 0.2)";
+            this.style.backgroundColor = "#262730";
+            this.style.borderColor = "rgba(250, 250, 250, 0.2)";
         }});
 
         function formatear(val) {{
@@ -131,12 +131,12 @@ def generar_pdf_nativo(dataframe, titulo="Reporte Financiero"):
     <head>
         <meta charset="utf-8">
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; }}
-            h2 {{ color: #2c3e50; text-align: center; }}
+            body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #111; color: #fff; }}
+            h2 {{ color: #ffffff; text-align: center; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; font-size: 12px; }}
-            th {{ background-color: #2c3e50; color: white; }}
-            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            th, td {{ border: 1px solid #444; text-align: left; padding: 8px; font-size: 12px; }}
+            th {{ background-color: #262730; color: white; }}
+            tr:nth-child(even) {{ background-color: #1e1e1e; }}
         </style>
     </head>
     <body onload="window.print()">
@@ -329,7 +329,6 @@ with tab_registro:
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # MÁSCARA DIRECTA MISMO ESTILO
         monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())

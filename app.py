@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
@@ -27,10 +26,9 @@ MENSAJES_MOTIVACIONALES = [
 ]
 
 def limpiar_valor_corrupto(val):
-    """Evita valores numéricos absurdos o concatenados por error."""
     try:
         num = float(val)
-        if num > 1e11: # Si supera los 100 mil millones por error de concatenación
+        if num > 1e11:
             return 0.0
         return num
     except:
@@ -41,7 +39,6 @@ def cargar_datos():
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # Sanitizar datos corruptos automáticamente
                 for u, info in data.items():
                     for tx in info.get("transacciones", []):
                         tx["Monto"] = limpiar_valor_corrupto(tx.get("Monto", 0))
@@ -96,56 +93,11 @@ def parsear_monto(texto_monto):
     return val if val < 1e11 else 0.0
 
 # ==========================================
-# COMPONENTE CON MÁSCARA TECLA A TECLA SEGURO
+# ENTRADA DE MONTO NATIVA Y SEGURA
 # ==========================================
-def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
-    monto_inicial_fmt = f"{int(valor_defecto):,}".replace(',', '.') if valor_defecto > 0 else ""
-    
-    html_code = f"""
-    <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
-        <label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
-        <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
-               placeholder="0" 
-               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">
-    </div>
-    <script>
-        const input = document.getElementById("{key_name}");
-        
-        input.addEventListener("focus", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "#ff4b4b";
-        }});
-        
-        input.addEventListener("blur", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "rgba(250, 250, 250, 0.2)";
-        }});
-
-        function formatear(val) {{
-            let num = val.replace(/\\D/g, "");
-            if(!num) return "";
-            return new Intl.NumberFormat('es-CO').format(num);
-        }}
-
-        function enviarValor() {{
-            let numLimpio = input.value.replace(/\\D/g, "");
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: numLimpio ? numLimpio : "0"
-            }}, '*');
-        }}
-
-        input.addEventListener("input", function(e) {{
-            let val = e.target.value;
-            e.target.value = formatear(val);
-            enviarValor();
-        }});
-
-        enviarValor();
-    </script>
-    """
-    val_string = components.html(html_code, height=75)
-    return parsear_monto(val_string)
+def input_moneda_seguro(label, key_name, valor_defecto=50000):
+    val_str = st.text_input(label, value=f"{valor_defecto:,.0f}".replace(",", "."), key=key_name)
+    return parsear_monto(val_str)
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -354,7 +306,7 @@ with tab_registro:
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
-        monto = input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
+        monto = input_moneda_seguro("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
     with col_b:
@@ -502,15 +454,15 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        monto_meta = input_moneda_tiempo_real("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
-        monto_inicial = input_moneda_tiempo_real("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
+        monto_meta = input_moneda_seguro("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
+        monto_inicial = input_moneda_seguro("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
         
-        meta_diaria_manual = input_moneda_tiempo_real("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
-        meta_semanal_manual = input_moneda_tiempo_real("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
+        meta_diaria_manual = input_moneda_seguro("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
+        meta_semanal_manual = input_moneda_seguro("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")
     

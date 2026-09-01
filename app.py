@@ -30,10 +30,16 @@ def cargar_datos():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Asegurar compatibilidad retroactiva con usuarios anteriores añadiendo "mascotas"
+            # Asegurar compatibilidad retroactiva total con la llave mascotas
             for user in data.values():
+                if not isinstance(user, dict):
+                    continue
                 if "mascotas" not in user:
                     user["mascotas"] = []
+                if "transacciones" not in user:
+                    user["transacciones"] = []
+                if "metas" not in user:
+                    user["metas"] = []
             return data
     return {
         "admin": {
@@ -42,6 +48,8 @@ def cargar_datos():
             "transacciones": [],
             "metas": [],
             "mascotas": []
+        }
+    }
         }
     }
 

@@ -55,21 +55,29 @@ if 'usuario_actual' not in st.session_state:
 if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
-# --- FUNCIONES DE FORMATEO Y PARSEO DE MONEDAS ---
+# --- FUNCIONES DE FORMATEO EN TIEMPO REAL ---
 def formato_cop(valor):
     if valor < 0:
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
 def parsear_monto(texto_monto):
-    """Convierte un texto con puntos/comas/caracteres a un número float válido."""
+    """Extrae únicamente los dígitos para convertir a número."""
     if not texto_monto:
         return 0.0
-    # Remover todo lo que no sea dígito
     limpio = re.sub(r"[^\d]", "", str(texto_monto))
     return float(limpio) if limpio else 0.0
 
-# --- FUNCIONES DE EXPORTACIÓN NATIVAS ---
+def formatear_input_monto(key_name):
+    """Callback que formatea el input en vivo agregando puntos de miles."""
+    val = st.session_state[key_name]
+    num = re.sub(r"[^\d]", "", str(val))
+    if num:
+        st.session_state[key_name] = f"{int(num):,}".replace(",", ".")
+    else:
+        st.session_state[key_name] = ""
+
+# --- EXPORTACIONES ---
 def generar_excel_nativo(dataframe):
     return dataframe.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
 
@@ -266,21 +274,28 @@ with tab_dashboard:
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO Y HISTORIAL DE TRANSACCIONES
+# 5. REGISTRO Y HISTORIAL CON FORMATEO REACTIVO
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
     
     nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
     
+    if "input_tx_monto" not in st.session_state:
+        st.session_state.input_tx_monto = "50.000"
+
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # Entrada con formateo dinámico de puntuación de miles mientras se escribe
-        monto_input_raw = st.text_input("Monto (COP $)", value="50.000", help="Puedes escribir solo los números, los puntos se calculan automáticamente.")
+        # Campo con formateo instantáneo al escribir
+        monto_input_raw = st.text_input(
+            "Monto (COP $)", 
+            key="input_tx_monto", 
+            on_change=formatear_input_monto, 
+            args=("input_tx_monto",)
+        )
         monto = parsear_monto(monto_input_raw)
-        st.caption(f"Valor a registrar: **{formato_cop(monto)}**")
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
@@ -414,7 +429,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO CON METAS CON FORMATEO
+# 6. PLANES DE AHORRO CON FORMATEO DIRECTO AL ESCRIBIR
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -426,27 +441,57 @@ with tab_ahorro:
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
     
+    # Inicializar llaves en Session State si no existen
+    if "input_meta_obj" not in st.session_state:
+        st.session_state.input_meta_obj = "505.000"
+    if "input_meta_ini" not in st.session_state:
+        st.session_state.input_meta_ini = "0"
+    if "input_meta_d" not in st.session_state:
+        st.session_state.input_meta_d = "0"
+    if "input_meta_s" not in st.session_state:
+        st.session_state.input_meta_s = "0"
+
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
         
-        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000")
+        # Formateo instantáneo mientras escribes en Monto Objetivo
+        monto_meta_raw = st.text_input(
+            "Monto Objetivo (COP $)", 
+            key="input_meta_obj", 
+            on_change=formatear_input_monto, 
+            args=("input_meta_obj",)
+        )
         monto_meta = parsear_monto(monto_meta_raw)
-        st.caption(f"Objetivo: **{formato_cop(monto_meta)}**")
         
-        monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
+        # Formateo instantáneo mientras escribes en Ahorro Inicial
+        monto_inicial_raw = st.text_input(
+            "Ahorro Inicial (COP $)", 
+            key="input_meta_ini", 
+            on_change=formatear_input_monto, 
+            args=("input_meta_ini",)
+        )
         monto_inicial = parsear_monto(monto_inicial_raw)
-        st.caption(f"Inicial: **{formato_cop(monto_inicial)}**")
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
         col_freq1, col_freq2 = st.columns(2)
         
-        meta_d_raw = col_freq1.text_input("Meta Diaria Sugerida (COP $)", value="0")
+        meta_d_raw = col_freq1.text_input(
+            "Meta Diaria Sugerida (COP $)", 
+            key="input_meta_d", 
+            on_change=formatear_input_monto, 
+            args=("input_meta_d",)
+        )
         meta_diaria_manual = parsear_monto(meta_d_raw)
         
-        meta_s_raw = col_freq2.text_input("Meta Semanal Sugerida (COP $)", value="0")
+        meta_s_raw = col_freq2.text_input(
+            "Meta Semanal Sugerida (COP $)", 
+            key="input_meta_s", 
+            on_change=formatear_input_monto, 
+            args=("input_meta_s",)
+        )
         meta_semanal_manual = parsear_monto(meta_s_raw)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")

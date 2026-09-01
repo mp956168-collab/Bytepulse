@@ -55,12 +55,21 @@ if 'usuario_actual' not in st.session_state:
 if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
+# --- FUNCIONES DE FORMATEO Y PARSEO DE MONEDAS ---
 def formato_cop(valor):
     if valor < 0:
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
-# --- FUNCIONES DE EXPORTACIÓN NATIVAS (SIN LIBRERÍAS EXTERNAS) ---
+def parsear_monto(texto_monto):
+    """Convierte un texto con puntos/comas/caracteres a un número float válido."""
+    if not texto_monto:
+        return 0.0
+    # Remover todo lo que no sea dígito
+    limpio = re.sub(r"[^\d]", "", str(texto_monto))
+    return float(limpio) if limpio else 0.0
+
+# --- FUNCIONES DE EXPORTACIÓN NATIVAS ---
 def generar_excel_nativo(dataframe):
     return dataframe.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
 
@@ -264,32 +273,38 @@ with tab_registro:
     
     nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
     
-    with st.form("form_transaccion", clear_on_submit=True):
-        col_a, col_b = st.columns(2)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        with col_a:
-            tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
-            monto = st.number_input("Monto (COP $)", min_value=1000.0, step=50000.0, format="%.0f")
-            fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
-            
-        with col_b:
-            categoria = st.selectbox("Categoría", [
-                "Uso Fondo Meta", 
-                "Ahorro Meta", 
-                "Nómina", 
-                "Alquiler", 
-                "Alimentación", 
-                "Servicios", 
-                "Transporte", 
-                "Tarjeta Crédito", 
-                "Otros"
-            ])
-            meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
-            descripcion = st.text_input("Descripción (Opcional)")
-            
-        guardar = st.form_submit_button("Guardar Transacción")
+        # Entrada con formateo dinámico de puntuación de miles mientras se escribe
+        monto_input_raw = st.text_input("Monto (COP $)", value="50.000", help="Puedes escribir solo los números, los puntos se calculan automáticamente.")
+        monto = parsear_monto(monto_input_raw)
+        st.caption(f"Valor a registrar: **{formato_cop(monto)}**")
         
-        if guardar:
+        fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
+        
+    with col_b:
+        categoria = st.selectbox("Categoría", [
+            "Uso Fondo Meta", 
+            "Ahorro Meta", 
+            "Nómina", 
+            "Alquiler", 
+            "Alimentación", 
+            "Servicios", 
+            "Transporte", 
+            "Tarjeta Crédito", 
+            "Otros"
+        ])
+        meta_destino = st.selectbox("Asociar a Meta (Opcional)", ["Ninguna"] + nombres_metas)
+        descripcion = st.text_input("Descripción (Opcional)")
+        
+    guardar = st.button("Guardar Transacción", use_container_width=True, type="primary")
+    
+    if guardar:
+        if monto <= 0:
+            st.warning("Ingresa un monto válido mayor a $0.")
+        else:
             nueva_tx = {
                 "Fecha": str(fecha),
                 "Tipo": tipo,
@@ -399,7 +414,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO CON METAS DIARIAS, SEMANALES Y MENSUALES
+# 6. PLANES DE AHORRO CON METAS CON FORMATEO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -410,23 +425,36 @@ with tab_ahorro:
     st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
-    with st.form("form_nueva_meta", clear_on_submit=True):
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-            monto_meta = st.number_input("Monto Objetivo (COP $)", min_value=100000.0, step=100000.0, format="%.0f")
-            monto_inicial = st.number_input("Ahorro Inicial (COP $)", min_value=0.0, step=50000.0, format="%.0f")
-            
-        with col_m2:
-            plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
-            st.caption("⏱️ **Frecuencia de Meta Deseada:**")
-            col_freq1, col_freq2 = st.columns(2)
-            meta_diaria_manual = col_freq1.number_input("Meta Diaria Sugerida (Opcional COP $)", min_value=0.0, step=5000.0, format="%.0f")
-            meta_semanal_manual = col_freq2.number_input("Meta Semanal Sugerida (Opcional COP $)", min_value=0.0, step=20000.0, format="%.0f")
-
-        btn_crear_meta = st.form_submit_button("Guardar Meta de Ahorro")
+    
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
         
-        if btn_crear_meta:
+        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000")
+        monto_meta = parsear_monto(monto_meta_raw)
+        st.caption(f"Objetivo: **{formato_cop(monto_meta)}**")
+        
+        monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
+        monto_inicial = parsear_monto(monto_inicial_raw)
+        st.caption(f"Inicial: **{formato_cop(monto_inicial)}**")
+        
+    with col_m2:
+        plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
+        st.caption("⏱️ **Frecuencia de Meta Deseada:**")
+        col_freq1, col_freq2 = st.columns(2)
+        
+        meta_d_raw = col_freq1.text_input("Meta Diaria Sugerida (COP $)", value="0")
+        meta_diaria_manual = parsear_monto(meta_d_raw)
+        
+        meta_s_raw = col_freq2.text_input("Meta Semanal Sugerida (COP $)", value="0")
+        meta_semanal_manual = parsear_monto(meta_s_raw)
+
+    btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")
+    
+    if btn_crear_meta:
+        if monto_meta <= 0:
+            st.warning("El monto objetivo debe ser mayor a $0.")
+        else:
             datos_user["metas"].append({
                 "Meta": nombre_meta, 
                 "Objetivo": float(monto_meta), 
@@ -465,12 +493,10 @@ with tab_ahorro:
             
             monto_faltante = max(0.0, monto_objetivo - monto_actual)
             
-            # Cálculo automático de cuotas según el monto faltante
             cuota_mensual = monto_faltante / plazo_m if plazo_m > 0 else 0
             cuota_semanal = cuota_mensual / 4.33 if cuota_mensual > 0 else 0
             cuota_diaria = cuota_mensual / 30.0 if cuota_mensual > 0 else 0
             
-            # Si el usuario especificó metas manuales las usamos, de lo contrario usamos el cálculo de la cuota faltante
             meta_d_display = meta.get("Meta_Diaria_Manual", 0.0) if meta.get("Meta_Diaria_Manual", 0.0) > 0 else cuota_diaria
             meta_s_display = meta.get("Meta_Semanal_Manual", 0.0) if meta.get("Meta_Semanal_Manual", 0.0) > 0 else cuota_semanal
             
@@ -490,7 +516,6 @@ with tab_ahorro:
                 st.write(f"**Progreso:** {formato_cop(monto_actual)} de {formato_cop(monto_objetivo)} (**{porcentaje_real:.1f}%**)")
                 st.progress(porcentaje_bar)
             
-            # Desglose de metas Diarias, Semanales y Mensuales
             mc1, mc2, mc3, mc4 = st.columns([2, 2, 2, 1])
             mc1.metric("📅 Meta Diaria", formato_cop(meta_d_display))
             mc2.metric("🗓️ Meta Semanal", formato_cop(meta_s_display))

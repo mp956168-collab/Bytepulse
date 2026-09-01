@@ -30,7 +30,6 @@ def cargar_datos():
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Asegurar compatibilidad retroactiva total con la llave mascotas
             for user in data.values():
                 if not isinstance(user, dict):
                     continue
@@ -48,8 +47,6 @@ def cargar_datos():
             "transacciones": [],
             "metas": [],
             "mascotas": []
-        }
-    }
         }
     }
 
@@ -87,48 +84,31 @@ def parsear_monto(texto_monto):
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
     monto_inicial_fmt = f"{valor_defecto:,.0f}".replace(',', '.') if valor_defecto > 0 else ""
     
-    html_code = f"""
-    <div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">
-        <label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
-        <input type="text" id="{key_name}" value="{monto_inicial_fmt}" 
-               placeholder="0" 
-               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">
-    </div>
-    <script>
-        const input = document.getElementById("{key_name}");
-        
-        input.addEventListener("focus", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "#ff4b4b";
-        }});
-        
-        input.addEventListener("blur", function() {{
-            this.style.backgroundColor = "#262730";
-            this.style.borderColor = "rgba(250, 250, 250, 0.2)";
-        }});
-
-        function formatear(val) {{
-            let num = val.replace(/\D/g, "");
-            if(!num) return "";
-            return new Intl.NumberFormat('es-CO').format(num);
-        }}
-
-        function enviarValor() {{
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: input.value
-            }}, '*');
-        }}
-
-        input.addEventListener("input", function(e) {{
-            let val = e.target.value;
-            e.target.value = formatear(val);
-            enviarValor();
-        }});
-
-        enviarValor();
-    </script>
-    """
+    html_code = (
+        '<div style="font-family: Source Sans Pro, sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto; margin-bottom: 0px;">'
+        f'<label style="font-size: 14px; color: #ffffff; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>'
+        f'<input type="text" id="{key_name}" value="{monto_inicial_fmt}" placeholder="0" '
+        'style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 8px; outline: none; box-sizing: border-box; background-color: #262730; color: #ffffff; transition: border-color 0.2s, background-color 0.2s;">'
+        '</div>'
+        '<script>'
+        f'const input = document.getElementById("{key_name}");'
+        'input.addEventListener("focus", function() { this.style.backgroundColor = "#262730"; this.style.borderColor = "#ff4b4b"; });'
+        'input.addEventListener("blur", function() { this.style.backgroundColor = "#262730"; this.style.borderColor = "rgba(250, 250, 250, 0.2)"; });'
+        'function formatear(val) {'
+        '    let num = val.replace(/\\D/g, "");'
+        '    if(!num) return "";'
+        '    return new Intl.NumberFormat("es-CO").format(num);'
+        '}'
+        'function enviarValor() {'
+        '    window.parent.postMessage({ type: "streamlit:setComponentValue", value: input.value }, "*");'
+        '}'
+        'input.addEventListener("input", function(e) {'
+        '    e.target.value = formatear(e.target.value);'
+        '    enviarValor();'
+        '});'
+        'enviarValor();'
+        '</script>'
+    )
     val_string = components.html(html_code, height=75)
     return parsear_monto(val_string)
 
@@ -204,7 +184,7 @@ if st.session_state.usuario_actual is None:
                             tel_guardado = db[u_recuperar].get("telefono", "")
                             if tel_recuperar == tel_guardado:
                                 pass_encontrada = db[u_recuperar]["password"]
-                                st.success(f"📲 **SMS Enviado a +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
+                                st.success(f"📲 **SMS Enviado al +57 {tel_recuperar}:** Tu contraseña actual es: `{pass_encontrada}`")
                             else:
                                 st.error("El número telefónico no coincide con el registrado.")
                         else:

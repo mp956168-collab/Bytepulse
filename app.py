@@ -727,3 +727,27 @@ if es_admin and tab_admin is not None:
                 st.dataframe(df_sel, use_container_width=True)
             else:
                 st.info("Este usuario no tiene transacciones registradas.")
+import streamlit.components.v1 as components
+
+# Leer el archivo HTML de la mascota
+with open("mascota.html", "r", encoding="utf-8") as f:
+    mascota_html = f.read()
+
+# Envolver el contenido con CSS para fijarlo en la esquina inferior derecha
+floating_wrapper = f"""
+<style>
+.floating-mascot {{
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999999;
+    pointer-events: auto;
+}}
+</style>
+<div class="floating-mascot">
+    {mascota_html}
+</div>
+"""
+
+# Renderizar el componente flotante
+components.html(floating_wrapper, height=180, scrolling=False)

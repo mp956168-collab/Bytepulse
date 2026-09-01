@@ -93,7 +93,6 @@ def input_moneda_con_puntos(label, key_name, valor_defecto=0):
     if val_key not in st.session_state:
         st.session_state[val_key] = float(valor_defecto)
 
-    # Forzar actualización si el valor por defecto cambia o se reinicia
     val_actual = st.session_state[val_key]
     val_inicial_str = f"{int(val_actual):,}".replace(",", ".") if val_actual > 0 else ""
 
@@ -477,6 +476,7 @@ with tab_ahorro:
     capacidad_ahorro = max(0.0, balance)
     cuota_sugerida = capacidad_ahorro * 0.20
     
+    # CORRECCIÓN DE LOS CARACTERES ESPECIALES EN LA RECOMENDACIÓN SUPERIOR
     st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")

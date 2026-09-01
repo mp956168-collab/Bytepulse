@@ -85,7 +85,7 @@ def formato_cop(valor):
     return f"${val_float:,.0f}".replace(",", ".")
 
 # ==========================================
-# INPUT MONEDA UNIFICADO CON MÁSCARA EN TIEMPO REAL
+# INPUT MONEDA CORREGIDO Y SINCRONIZADO
 # ==========================================
 def input_moneda_con_puntos(label, key_name, valor_defecto=0):
     val_key = f"val_num_{key_name}"
@@ -93,7 +93,9 @@ def input_moneda_con_puntos(label, key_name, valor_defecto=0):
     if val_key not in st.session_state:
         st.session_state[val_key] = float(valor_defecto)
 
-    val_inicial_str = f"{int(st.session_state[val_key]):,}".replace(",", ".") if st.session_state[val_key] > 0 else ""
+    # Forzar actualización si el valor por defecto cambia o se reinicia
+    val_actual = st.session_state[val_key]
+    val_inicial_str = f"{int(val_actual):,}".replace(",", ".") if val_actual > 0 else ""
 
     component_html = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin-bottom: 1rem;">
@@ -482,12 +484,11 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        # Corrección: valor por defecto en 0 para que no sobreescriba con 1.000.000
-        monto_meta = input_moneda_con_puntos("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=0)
+        monto_meta = input_moneda_con_puntos("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=505000)
         monto_inicial = input_moneda_con_puntos("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
         
     with col_m2:
-        plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
+        plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=2)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
         
         meta_diaria_manual = input_moneda_con_puntos("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
@@ -531,6 +532,8 @@ with tab_ahorro:
             for m in datos_user.get("metas", []):
                 m["Actual"] = 0.0
                 m["Objetivo"] = min(m["Objetivo"], 1e9)
+            if "val_num_monto_meta_live" in st.session_state:
+                st.session_state["val_num_monto_meta_live"] = 505000.0
             guardar_datos()
             st.success("Se han saneado los saldos de tus metas para corregir valores erróneos.")
             st.rerun()

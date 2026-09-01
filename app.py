@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
@@ -55,18 +56,48 @@ if 'usuario_actual' not in st.session_state:
 if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
-# --- FUNCIONES DE FORMATEO Y PARSEO DE MONEDAS ---
 def formato_cop(valor):
     if valor < 0:
         return f"-${abs(valor):,.0f}".replace(",", ".")
     return f"${valor:,.0f}".replace(",", ".")
 
 def parsear_monto(texto_monto):
-    """Extrae únicamente los dígitos para convertir a número dinámicamente."""
     if not texto_monto:
         return 0.0
     limpio = re.sub(r"[^\d]", "", str(texto_monto))
     return float(limpio) if limpio else 0.0
+
+# ==========================================
+# COMPONENTE DE ENTRADA CON MÁSCARA TECLA A TECLA (JS)
+# ==========================================
+def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
+    """
+    Crea un campo de texto que aplica los puntos de miles tecla a tecla al escribir.
+    """
+    html_code = f"""
+    <div style="font-family: sans-serif; margin-bottom: 10px;">
+        <label style="font-size: 14px; color: #31333F; display: block; margin-bottom: 4px;">{label}</label>
+        <input type="text" id="{key_name}" value="{valor_defecto:,.0f}".replace(',', '.') 
+               placeholder="0" 
+               style="width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; outline: none; box-sizing: border-box;">
+    </div>
+    <script>
+        const input = document.getElementById("{key_name}");
+        
+        function formatear(val) {{
+            let num = val.replace(/\D/g, "");
+            if(!num) return "";
+            return new Intl.NumberFormat('es-CO').format(num);
+        }}
+
+        input.addEventListener("input", function(e) {{
+            let cursor = e.target.selectionStart;
+            let val = e.target.value;
+            e.target.value = formatear(val);
+        }});
+    </script>
+    """
+    components.html(html_code, height=75)
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -276,10 +307,11 @@ with tab_registro:
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # Entrada de texto flexible para montos con confirmación en COP
-        monto_input_raw = st.text_input("Monto (COP $)", value="50.000", help="Puedes ingresar valores con o sin puntos (ej: 50000 o 50.000)")
+        # MÁSCARA TECLA A TECLA AL ESCRIBIR
+        input_moneda_tiempo_real("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
+        monto_input_raw = st.text_input("Confirmar Monto en Sistema", value="50.000", help="Lee automáticamente el número sin importar cómo lo escribas")
         monto = parsear_monto(monto_input_raw)
-        st.caption(f"💵 **Confirmación de Monto:** `{formato_cop(monto)}`")
+        st.caption(f"💵 **Confirmación Final:** `{formato_cop(monto)}`")
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
@@ -429,14 +461,13 @@ with tab_ahorro:
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
         
-        # Entrada de texto con interpretación automática de números grandes
-        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000", help="Escribe libremente con o sin puntos (ej: 505000 o 505.000)")
+        input_moneda_tiempo_real("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=1000000)
+        monto_meta_raw = st.text_input("Confirmar Objetivo", value="1.000.000")
         monto_meta = parsear_monto(monto_meta_raw)
-        st.caption(f"💵 **Confirmación Meta:** `{formato_cop(monto_meta)}`")
         
-        monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
+        input_moneda_tiempo_real("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
+        monto_inicial_raw = st.text_input("Confirmar Ahorro Inicial", value="0")
         monto_inicial = parsear_monto(monto_inicial_raw)
-        st.caption(f"💵 **Confirmación Inicial:** `{formato_cop(monto_inicial)}`")
         
     with col_m2:
         plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)

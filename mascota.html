@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ahorracoon Widget</title>
+  <style>
+    .mascot-widget-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .mascot-speech-bubble {
+      background: #ffffff;
+      color: #1e293b;
+      padding: 12px 16px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+      border: 2px solid #e2e8f0;
+      margin-bottom: 8px;
+      max-width: 200px;
+      font-size: 14px;
+      line-height: 1.3;
+      position: relative;
+      animation: floatMessage 3s ease-in-out infinite;
+      cursor: pointer;
+    }
+    .mascot-speech-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      right: 25px;
+      border-width: 8px 8px 0;
+      border-style: solid;
+      border-color: #ffffff transparent;
+      display: block;
+      width: 0;
+    }
+    .mascot-speech-bubble strong {
+      color: #16a34a;
+    }
+    .mascot-trigger-btn {
+      background: #ffffff;
+      border: 3px solid #e2e8f0;
+      border-radius: 50%;
+      width: 75px;
+      height: 75px;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+      padding: 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .mascot-trigger-btn:hover {
+      transform: scale(1.1) rotate(-4deg);
+    }
+    .mascot-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .mascot-chat-box {
+      display: none;
+      position: absolute;
+      bottom: 95px;
+      right: 0;
+      width: 280px;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    .mascot-chat-header {
+      background: #16a34a;
+      color: white;
+      padding: 12px 16px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .mascot-chat-close {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .mascot-chat-body {
+      padding: 16px;
+      font-size: 14px;
+      color: #334155;
+    }
+    .mascot-chat-body button {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #0f172a;
+      text-align: left;
+    }
+    @keyframes floatMessage {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="mascot-widget-container">
+    <div class="mascot-chat-box" id="mascotChatBox">
+      <div class="mascot-chat-header">
+        <span>Ahorracoon 🦝</span>
+        <button class="mascot-chat-close" id="closeChatBtn">&times;</button>
+      </div>
+      <div class="mascot-chat-body">
+        <p>¡Hola! Soy tu copiloto de ahorro. ¿En qué te ayudo?</p>
+        <button onclick="alert('Navega por el menú para revisar tus metas.')">🎯 Revisar metas</button>
+        <button onclick="alert('Consulta tus cálculos y estadísticas.')">📊 Análisis financiero</button>
+      </div>
+    </div>
+
+    <div class="mascot-speech-bubble" id="speechBubble">
+      👋 ¡Hola! ¿Listo para <strong>ahorrar</strong> hoy?
+    </div>
+
+    <button class="mascot-trigger-btn" id="mascotBtn">
+      <img src="https://i.postimg.cc/mD363k8m/Fondo-de-saludo-eliminado.png" alt="Ahorracoon" class="mascot-img" id="mascotImg">
+    </button>
+  </div>
+
+  <script>
+    const mascotBtn = document.getElementById('mascotBtn');
+    const speechBubble = document.getElementById('speechBubble');
+    const mascotChatBox = document.getElementById('mascotChatBox');
+    const closeChatBtn = document.getElementById('closeChatBtn');
+
+    function toggleChat() {
+      const isOpen = mascotChatBox.style.display === 'flex';
+      mascotChatBox.style.display = isOpen ? 'none' : 'flex';
+      speechBubble.style.display = isOpen ? 'block' : 'none';
+    }
+
+    mascotBtn.addEventListener('click', toggleChat);
+    speechBubble.addEventListener('click', toggleChat);
+    closeChatBtn.addEventListener('click', toggleChat);
+  </script>
+</body>
+</html>

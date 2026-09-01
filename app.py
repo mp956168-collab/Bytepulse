@@ -26,10 +26,31 @@ MENSAJES_MOTIVACIONALES = [
     "¡Paso firme! Mantén la consistencia y verás cómo tus metas se cumplen más rápido. ⭐"
 ]
 
+def limpiar_valor_corrupto(val):
+    """Evita valores numéricos absurdos o concatenados por error."""
+    try:
+        num = float(val)
+        if num > 1e11: # Si supera los 100 mil millones por error de concatenación
+            return 0.0
+        return num
+    except:
+        return 0.0
+
 def cargar_datos():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Sanitizar datos corruptos automáticamente
+                for u, info in data.items():
+                    for tx in info.get("transacciones", []):
+                        tx["Monto"] = limpiar_valor_corrupto(tx.get("Monto", 0))
+                    for m in info.get("metas", []):
+                        m["Objetivo"] = limpiar_valor_corrupto(m.get("Objetivo", 0))
+                        m["Actual"] = limpiar_valor_corrupto(m.get("Actual", 0))
+                return data
+        except:
+            pass
     return {
         "admin": {
             "password": "123",
@@ -68,17 +89,16 @@ def formato_cop(valor):
 def parsear_monto(texto_monto):
     if not texto_monto:
         return 0.0
-    # Limpiamos todo excepto números
     limpio = re.sub(r"[^\d]", "", str(texto_monto))
-    return float(limpio) if limpio else 0.0
+    if not limpio:
+        return 0.0
+    val = float(limpio)
+    return val if val < 1e11 else 0.0
 
 # ==========================================
 # COMPONENTE CON MÁSCARA TECLA A TECLA SEGURO
 # ==========================================
 def input_moneda_tiempo_real(label, key_name, valor_defecto=0):
-    """
-    Crea un campo con formato de miles en tiempo real sincronizado con Streamlit.
-    """
     monto_inicial_fmt = f"{int(valor_defecto):,}".replace(',', '.') if valor_defecto > 0 else ""
     
     html_code = f"""
@@ -529,8 +549,9 @@ with tab_ahorro:
         if st.button("🧹 Limpiar / Reiniciar Metas Corregidas"):
             for m in datos_user.get("metas", []):
                 m["Actual"] = 0.0
+                m["Objetivo"] = min(m["Objetivo"], 1e9)
             guardar_datos()
-            st.success("Se han reiniciado los saldos de tus metas a cero para corregir valores erróneos.")
+            st.success("Se han saneado los saldos de tus metas para corregir valores erróneos.")
             st.rerun()
 
     st.subheader("Tus Metas Activas")

@@ -731,7 +731,7 @@ import base64
 import json
 import streamlit.components.v1 as components
 
-# 1. Lista con los nombres de las imágenes que tienes en tu proyecto para que roten
+# Lista con los nombres de las imágenes locales para la rotación
 archivos_imagenes = ["Fondo de saludo  eliminado.png", "porrista.png"] 
 
 imagenes_base64 = []
@@ -746,7 +746,7 @@ for archivo in archivos_imagenes:
 img_inicial = imagenes_base64[0] if imagenes_base64 else ""
 imagenes_js = json.dumps(imagenes_base64)
 
-# 2. Widget HTML interactivo completo
+# Widget HTML completo con rotación, menú interactivo y enlaces directos
 widget_html = f"""
 <!DOCTYPE html>
 <html lang="es">
@@ -881,11 +881,14 @@ widget_html = f"""
       </div>
       <div class="mascot-chat-body">
         <p>¡Hola! Soy tu copiloto. ¿Qué quieres hacer hoy con tus finanzas?</p>
-        <!-- Enlace directo que salta a la sección de metas -->
+        <!-- Enlace directo a la sección de metas -->
         <a href="#tus-metas-activas" style="text-decoration: none;" target="_top">
-          <button>🎯 Ver mi meta mensual</button>
+          <button style="width: 100%; cursor: pointer;">🎯 Ver mi meta mensual</button>
         </a>
-        <button onclick="alert('Abriendo calculadora...')">🧮 Calcular un nuevo plan</button>
+        <!-- Enlace directo a la sección de calculadora -->
+        <a href="#seccion-calculadora" style="text-decoration: none;" target="_top">
+          <button style="width: 100%; cursor: pointer;">🧮 Calcular un nuevo plan</button>
+        </a>
       </div>
     </div>
     
@@ -913,7 +916,6 @@ widget_html = f"""
       mascotChatBox.style.display = isOpen ? 'none' : 'flex';
       speechBubble.style.display = isOpen ? 'block' : 'none';
 
-      // Rota la expresión de la imagen cada vez que abres o interactúas con la mascota
       if (!isOpen && listaImagenes.length > 1) {{
         indiceActual = (indiceActual + 1) % listaImagenes.length;
         mascotImg.src = listaImagenes[indiceActual];

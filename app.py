@@ -6,6 +6,7 @@ import json
 import os
 import random
 import re
+import streamlit.components.v1 as components
 
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y PERSISTENCIA
@@ -55,7 +56,7 @@ if 'usuario_actual' not in st.session_state:
 if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
-# --- FUNCIONES DE FORMATEO EN TIEMPO REAL ---
+# --- FUNCIONES DE FORMATEO Y PARSEO DE MONEDAS ---
 def formato_cop(valor):
     if valor < 0:
         return f"-${abs(valor):,.0f}".replace(",", ".")
@@ -68,16 +69,53 @@ def parsear_monto(texto_monto):
     limpio = re.sub(r"[^\d]", "", str(texto_monto))
     return float(limpio) if limpio else 0.0
 
-def formatear_input_monto(key_name):
-    """Callback que formatea el input en vivo agregando puntos de miles."""
-    val = st.session_state[key_name]
-    num = re.sub(r"[^\d]", "", str(val))
-    if num:
-        st.session_state[key_name] = f"{int(num):,}".replace(",", ".")
-    else:
-        st.session_state[key_name] = ""
+# --- COMPONENTE JAVASCRIPT: FORMATEO EN VIVO TECLA POR TECLA ---
+def autodesformatear_inputs_js():
+    """Inyecta JavaScript para interceptar la escritura y poner puntos de miles en vivo."""
+    js_code = """
+    <script>
+    function aplicarMascaraPuntos() {
+        const doc = window.parent.document;
+        const inputs = doc.querySelectorAll('input[type="text"]');
+        
+        inputs.forEach(input => {
+            if (input.dataset.maskApplied) return;
+            
+            // Marcar como procesado
+            input.dataset.maskApplied = "true";
+            
+            input.addEventListener('input', function(e) {
+                // Si el label contiene palabras clave de montos/moneda
+                const label = input.closest('[data-testid="stTextInput"]');
+                if (label && (label.innerText.includes('Monto') || label.innerText.includes('COP') || label.innerText.includes('Sugerida'))) {
+                    let cursorPosition = this.selectionStart;
+                    let originalLength = this.value.length;
+                    
+                    // Limpiar todo lo que no sea dígito
+                    let cleanVal = this.value.replace(/[^0-9]/g, '');
+                    
+                    if (cleanVal) {
+                        // Formatear con puntos de miles
+                        let formatted = parseInt(cleanVal, 10).toLocaleString('es-CO');
+                        this.value = formatted;
+                    } else {
+                        this.value = '';
+                    }
+                }
+            });
+        });
+    }
+    
+    // Ejecutar periódicamente para detectar nuevos campos cargados
+    setInterval(aplicarMascaraPuntos, 300);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
 
-# --- EXPORTACIONES ---
+# Inyectar el script en vivo
+autodesformatear_inputs_js()
+
+# --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
     return dataframe.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
 
@@ -274,27 +312,19 @@ with tab_dashboard:
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 5. REGISTRO Y HISTORIAL CON FORMATEO REACTIVO
+# 5. REGISTRO Y HISTORIAL DE TRANSACCIONES
 # ==========================================
 with tab_registro:
     st.subheader("Nuevo Registro Financiero")
     
     nombres_metas = [m["Meta"] for m in datos_user.get("metas", [])]
-    
-    if "input_tx_monto" not in st.session_state:
-        st.session_state.input_tx_monto = "50.000"
 
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
         
-        # Campo con formateo instantáneo al escribir
-        monto_input_raw = st.text_input(
-            "Monto (COP $)", 
-            key="input_tx_monto", 
-            on_change=formatear_input_monto, 
-            args=("input_tx_monto",)
-        )
+        # Campo con formateo JS en tiempo real
+        monto_input_raw = st.text_input("Monto (COP $)", value="50.000")
         monto = parsear_monto(monto_input_raw)
         
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
@@ -429,7 +459,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO CON FORMATEO DIRECTO AL ESCRIBIR
+# 6. PLANES DE AHORRO CON FORMATEO JS EN VIVO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -440,37 +470,16 @@ with tab_ahorro:
     st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
-    
-    # Inicializar llaves en Session State si no existen
-    if "input_meta_obj" not in st.session_state:
-        st.session_state.input_meta_obj = "505.000"
-    if "input_meta_ini" not in st.session_state:
-        st.session_state.input_meta_ini = "0"
-    if "input_meta_d" not in st.session_state:
-        st.session_state.input_meta_d = "0"
-    if "input_meta_s" not in st.session_state:
-        st.session_state.input_meta_s = "0"
 
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
         
-        # Formateo instantáneo mientras escribes en Monto Objetivo
-        monto_meta_raw = st.text_input(
-            "Monto Objetivo (COP $)", 
-            key="input_meta_obj", 
-            on_change=formatear_input_monto, 
-            args=("input_meta_obj",)
-        )
+        # Al escribir aquí, los puntos de miles aparecen instantáneamente sin "Press Enter"
+        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000")
         monto_meta = parsear_monto(monto_meta_raw)
         
-        # Formateo instantáneo mientras escribes en Ahorro Inicial
-        monto_inicial_raw = st.text_input(
-            "Ahorro Inicial (COP $)", 
-            key="input_meta_ini", 
-            on_change=formatear_input_monto, 
-            args=("input_meta_ini",)
-        )
+        monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
         monto_inicial = parsear_monto(monto_inicial_raw)
         
     with col_m2:
@@ -478,20 +487,10 @@ with tab_ahorro:
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
         col_freq1, col_freq2 = st.columns(2)
         
-        meta_d_raw = col_freq1.text_input(
-            "Meta Diaria Sugerida (COP $)", 
-            key="input_meta_d", 
-            on_change=formatear_input_monto, 
-            args=("input_meta_d",)
-        )
+        meta_d_raw = col_freq1.text_input("Meta Diaria Sugerida (COP $)", value="0")
         meta_diaria_manual = parsear_monto(meta_d_raw)
         
-        meta_s_raw = col_freq2.text_input(
-            "Meta Semanal Sugerida (COP $)", 
-            key="input_meta_s", 
-            on_change=formatear_input_monto, 
-            args=("input_meta_s",)
-        )
+        meta_s_raw = col_freq2.text_input("Meta Semanal Sugerida (COP $)", value="0")
         meta_semanal_manual = parsear_monto(meta_s_raw)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")

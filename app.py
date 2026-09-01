@@ -728,41 +728,94 @@ if es_admin and tab_admin is not None:
             else:
                 st.info("Este usuario no tiene transacciones registradas.")
 import base64
+import streamlit.components.v1 as components
 
-# --- SECCIÓN DE CHAT CON LA MASCOTA ---
+# 1. Cargar la imagen local y convertirla a Base64
+with open("porrista.png", "rb") as img_file:
+    img_base64 = base64.b64encode(img_file.read()).decode()
+
+# 2. Renderizar la mascota flotante en la esquina inferior derecha
+floating_wrapper = f"""
+<style>
+.floating-mascot {{
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    cursor: pointer;
+}}
+.chat-bubble {{
+    background: white;
+    padding: 12px 18px;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    margin-bottom: 10px;
+    font-family: sans-serif;
+    font-size: 14px;
+    color: #333;
+    border: 1px solid #e0e0e0;
+}}
+.mascot-img {{
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    background: white;
+}}
+</style>
+<div class="floating-mascot">
+    <div class="chat-bubble">
+        👋 ¡Hola! ¿Listo para <span style="color: green; font-weight: bold;">ahorrar</span> hoy?
+    </div>
+    <img src="data:image/png;base64,{img_base64}" class="mascot-img">
+</div>
+"""
+components.html(floating_wrapper, height=220, scrolling=False)
+
+
+# 3. SECCIÓN DE CHAT CON LA MASCOTA Y SU IMAGEN EN LA PÁGINA
 st.markdown("---")
-st.subheader("💬 Habla con tu mascota ahorradora")
+st.subheader("💬 Hazle preguntas a tu mascota")
 
-# Inicializar historial de conversación si no existe
+# Inicializar historial de chat
 if "mensajes_mascota" not in st.session_state:
     st.session_state.mensajes_mascota = [
         {"origen": "mascota", "texto": "¡Hola! Pregúntame sobre tus finanzas, ahorros o consejos para hoy."}
     ]
 
-# Mostrar historial de mensajes
+# Mostrar los mensajes con la imagen de la mascota integrada
 for msg in st.session_state.mensajes_mascota:
     if msg["origen"] == "mascota":
-        st.info(f"🦝 **Mascota:** {msg['texto']}")
+        col1, col2 = st.columns([1, 10])
+        with col1:
+            # Mostrar la imagen de la mascota usando HTML dentro de Streamlit
+            st.markdown(f'<img src="data:image/png;base64,{img_base64}" style="width:50px; height:50px; border-radius:50%; object-fit:cover;">', unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"**Mascota:** {msg['texto']}")
     else:
-        st.success(f"👤 **Tú:** {msg['texto']}")
+        st.markdown(f"**Tú:** {msg['texto']}")
 
-# Campo de entrada para hacer la pregunta
-pregunta_usuario = st.text_input("Escribe tu pregunta aquí...", key="input_pregunta")
+# Entrada de texto para preguntar
+pregunta_usuario = st.text_input("Escribe tu duda financiera aquí...", key="input_chat_mascota")
 
-if st.button("Enviar pregunta"):
+if st.button("Enviar"):
     if pregunta_usuario.strip():
-        # Guardar pregunta del usuario
+        # Guardar la pregunta del usuario
         st.session_state.mensajes_mascota.append({"origen": "usuario", "texto": pregunta_usuario})
         
-        # Generar una respuesta basada en la pregunta (puedes conectar esto con tu lógica o IA)
+        # Lógica de respuesta de la mascota
         pregunta_lower = pregunta_usuario.lower()
         if "ahorrar" in pregunta_lower:
-            respuesta = "Te sugiero apartar al menos el 10% de tus ingresos mensuales apenas los recibas."
+            respuesta = "Te sugiero apartar un porcentaje fijo de tus ingresos cada vez que te paguen."
         elif "gasto" in pregunta_lower:
-            respuesta = "Recuerda revisar los reportes de gastos que calculamos en la aplicación para identificar fugas de dinero."
+            respuesta = "Echa un vistazo a tus registros en la app para ver en qué se va el dinero más rápido."
         else:
-            respuesta = f"Interesante pregunta sobre '{pregunta_usuario}'. ¡Sigue registrando tus datos para mantener el control financiero!"
+            respuesta = f"¡Excelente pregunta! Sigue registrando tus datos para que podamos analizarlo juntos."
             
-        # Guardar respuesta de la mascota
+        # Guardar la respuesta de la mascota
         st.session_state.mensajes_mascota.append({"origen": "mascota", "texto": respuesta})
         st.rerun()

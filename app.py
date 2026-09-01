@@ -84,19 +84,42 @@ def formato_cop(valor):
     return f"${val_float:,.0f}".replace(",", ".")
 
 # ==========================================
-# INPUT MONEDA NATIVO ESTABLE
+# INPUT MONEDA CON MÁSCARA AUTOMÁTICA DE PUNTOS
 # ==========================================
 def input_moneda_con_puntos(label, key_name, valor_defecto=50000):
-    valor = st.number_input(
+    # Inicializar el estado si no existe con el valor por defecto formateado
+    key_val = f"val_{key_name}"
+    if key_val not in st.session_state:
+        st.session_state[key_val] = f"{int(valor_defecto):,}".replace(",", ".")
+
+    def actualizar_formato():
+        texto_ingresado = st.session_state[key_name]
+        # Extraer solo los dígitos numéricos
+        solo_numeros = "".join(filter(str.isdigit, texto_ingresado))
+        if solo_numeros == "":
+            st.session_state[key_val] = "0"
+        else:
+            numero = int(solo_numeros)
+            # Aplicar formato con puntos de miles estilo colombiano
+            st.session_state[key_val] = f"{numero:,}".replace(",", ".")
+
+    # Si el input cambia por acción del usuario, se actualiza el estado formateado
+    if key_name in st.session_state and st.session_state[key_name] != st.session_state[key_val]:
+        actualizar_formato()
+
+    texto_final = st.text_input(
         label, 
-        min_value=0.0, 
-        max_value=1e11, 
-        value=float(valor_defecto), 
-        step=1000.0,
+        value=st.session_state[key_val], 
         key=key_name,
-        format="%.0f"
+        on_change=actualizer_helper if 'actualizer_helper' in globals() else None
     )
-    return float(valor)
+    
+    # Limpieza final para retornar un valor float limpio a la lógica
+    solo_numeros = "".join(filter(str.isdigit, st.session_state[key_val]))
+    try:
+        return float(solo_numeros) if solo_numeros else 0.0
+    except ValueError:
+        return 0.0
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):

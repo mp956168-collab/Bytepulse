@@ -26,29 +26,10 @@ MENSAJES_MOTIVACIONALES = [
     "¡Paso firme! Mantén la consistencia y verás cómo tus metas se cumplen más rápido. ⭐"
 ]
 
-def limpiar_valor_corrupto(val):
-    try:
-        num = float(val)
-        if num > 1e11:
-            return 0.0
-        return num
-    except:
-        return 0.0
-
 def cargar_datos():
     if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for u, info in data.items():
-                    for tx in info.get("transacciones", []):
-                        tx["Monto"] = limpiar_valor_corrupto(tx.get("Monto", 0))
-                    for m in info.get("metas", []):
-                        m["Objetivo"] = limpiar_valor_corrupto(m.get("Objetivo", 0))
-                        m["Actual"] = limpiar_valor_corrupto(m.get("Actual", 0))
-                return data
-        except:
-            pass
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
     return {
         "admin": {
             "password": "123",
@@ -75,58 +56,64 @@ if 'usuario_actual' not in st.session_state:
 if 'mostrar_registro' not in st.session_state:
     st.session_state.mostrar_registro = False
 
+# --- FUNCIONES DE FORMATEO Y PARSEO DE MONEDAS ---
 def formato_cop(valor):
-    try:
-        val_float = float(valor)
-    except (ValueError, TypeError):
-        val_float = 0.0
-    if val_float < 0:
-        return f"-${abs(val_float):,.0f}".replace(",", ".")
-    return f"${val_float:,.0f}".replace(",", ".")
+    if valor < 0:
+        return f"-${abs(valor):,.0f}".replace(",", ".")
+    return f"${valor:,.0f}".replace(",", ".")
 
-# ==========================================
-# INPUT MONEDA CORREGIDO Y SINCRONIZADO
-# ==========================================
-def input_moneda_con_puntos(label, key_name, valor_defecto=0):
-    val_key = f"val_num_{key_name}"
-    
-    if val_key not in st.session_state:
-        st.session_state[val_key] = float(valor_defecto)
+def parsear_monto(texto_monto):
+    """Extrae únicamente los dígitos para convertir a número."""
+    if not texto_monto:
+        return 0.0
+    limpio = re.sub(r"[^\d]", "", str(texto_monto))
+    return float(limpio) if limpio else 0.0
 
-    val_actual = st.session_state[val_key]
-    val_inicial_str = f"{int(val_actual):,}".replace(",", ".") if val_actual > 0 else ""
-
-    component_html = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin-bottom: 1rem;">
-        <label style="font-size: 14px; color: #fafafa; display: block; margin-bottom: 6px; font-weight: 400;">{label}</label>
-        <input type="text" id="input_{key_name}" value="{val_inicial_str}" 
-        style="width: 100%; padding: 8px 12px; background-color: #262730; color: white; border: 1px solid #41424C; border-radius: 4px; font-size: 16px; outline: none;"
-        oninput="
-            let cleanVal = this.value.replace(/\\D/g, '');
-            if(cleanVal === '') {{
-                this.value = '';
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: 0}}, '*');
-            }} else {{
-                let num = parseInt(cleanVal, 10);
-                this.value = num.toLocaleString('de-DE');
-                window.parent.postMessage({{type: 'streamlit:setComponentValue', value: num}}, '*');
-            }}
-        "
-        onfocus="this.style.borderColor='#ff4b4b';"
-        onblur="this.style.borderColor='#41424C';"
-        >
-    </div>
-    """
-    
-    res = components.html(component_html, height=75)
-    
-    if res is not None:
-        try:
-            st.session_state[val_key] = float(res)
-        except:
-            pass
+# --- COMPONENTE JAVASCRIPT: FORMATEO EN VIVO TECLA POR TECLA ---
+def autodesformatear_inputs_js():
+    """Inyecta JavaScript para interceptar la escritura y poner puntos de miles en vivo."""
+    js_code = """
+    <script>
+    function aplicarMascaraPuntos() {
+        const doc = window.parent.document;
+        const inputs = doc.querySelectorAll('input[type="text"]');
+        
+        inputs.forEach(input => {
+            if (input.dataset.maskApplied) return;
             
-    return st.session_state[val_key]
+            // Marcar como procesado
+            input.dataset.maskApplied = "true";
+            
+            input.addEventListener('input', function(e) {
+                // Si el label contiene palabras clave de montos/moneda
+                const label = input.closest('[data-testid="stTextInput"]');
+                if (label && (label.innerText.includes('Monto') || label.innerText.includes('COP') || label.innerText.includes('Sugerida'))) {
+                    let cursorPosition = this.selectionStart;
+                    let originalLength = this.value.length;
+                    
+                    // Limpiar todo lo que no sea dígito
+                    let cleanVal = this.value.replace(/[^0-9]/g, '');
+                    
+                    if (cleanVal) {
+                        // Formatear con puntos de miles
+                        let formatted = parseInt(cleanVal, 10).toLocaleString('es-CO');
+                        this.value = formatted;
+                    } else {
+                        this.value = '';
+                    }
+                }
+            });
+        });
+    }
+    
+    // Ejecutar periódicamente para detectar nuevos campos cargados
+    setInterval(aplicarMascaraPuntos, 300);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+# Inyectar el script en vivo
+autodesformatear_inputs_js()
 
 # --- EXPORTACIONES NATIVAS ---
 def generar_excel_nativo(dataframe):
@@ -138,12 +125,12 @@ def generar_pdf_nativo(dataframe, titulo="Reporte Financiero"):
     <head>
         <meta charset="utf-8">
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #111; color: #fff; }}
-            h2 {{ color: #ffffff; text-align: center; }}
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            h2 {{ color: #2c3e50; text-align: center; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ border: 1px solid #444; text-align: left; padding: 8px; font-size: 12px; }}
-            th {{ background-color: #262730; color: white; }}
-            tr:nth-child(even) {{ background-color: #1e1e1e; }}
+            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; font-size: 12px; }}
+            th {{ background-color: #2c3e50; color: white; }}
+            tr:nth-child(even) {{ background-color: #f2f2f2; }}
         </style>
     </head>
     <body onload="window.print()">
@@ -335,7 +322,11 @@ with tab_registro:
     col_a, col_b = st.columns(2)
     with col_a:
         tipo = st.selectbox("Tipo de Movimiento", ["Gasto", "Ahorro / Inversión", "Ingreso", "Deuda"])
-        monto = input_moneda_con_puntos("Monto (COP $)", "monto_tx_live", valor_defecto=50000)
+        
+        # Campo con formateo JS en tiempo real
+        monto_input_raw = st.text_input("Monto (COP $)", value="50.000")
+        monto = parsear_monto(monto_input_raw)
+        
         fecha = st.date_input("Fecha de la Transacción", datetime.now().date())
         
     with col_b:
@@ -468,7 +459,7 @@ with tab_registro:
             st.rerun()
 
 # ==========================================
-# 6. PLANES DE AHORRO
+# 6. PLANES DE AHORRO CON FORMATEO JS EN VIVO
 # ==========================================
 with tab_ahorro:
     st.subheader("Planes de Ahorro e Inteligencia Financiera")
@@ -476,7 +467,6 @@ with tab_ahorro:
     capacidad_ahorro = max(0.0, balance)
     cuota_sugerida = capacidad_ahorro * 0.20
     
-    # CORRECCIÓN DE LOS CARACTERES ESPECIALES EN LA RECOMENDACIÓN SUPERIOR
     st.info(f"💡 **Recomendación Bytepulse:** Tu dinero libre disponible es **{formato_cop(capacidad_ahorro)}**. Te sugerimos abonar al menos **{formato_cop(cuota_sugerida)}** al mes a tus metas.")
 
     st.subheader("➕ Crear Nueva Meta de Ahorro")
@@ -484,15 +474,24 @@ with tab_ahorro:
     col_m1, col_m2 = st.columns(2)
     with col_m1:
         nombre_meta = st.text_input("Nombre de la Meta", value="Viaje / Inversión")
-        monto_meta = input_moneda_con_puntos("Monto Objetivo (COP $)", "monto_meta_live", valor_defecto=505000)
-        monto_inicial = input_moneda_con_puntos("Ahorro Inicial (COP $)", "monto_inic_live", valor_defecto=0)
+        
+        # Al escribir aquí, los puntos de miles aparecen instantáneamente sin "Press Enter"
+        monto_meta_raw = st.text_input("Monto Objetivo (COP $)", value="1.000.000")
+        monto_meta = parsear_monto(monto_meta_raw)
+        
+        monto_inicial_raw = st.text_input("Ahorro Inicial (COP $)", value="0")
+        monto_inicial = parsear_monto(monto_inicial_raw)
         
     with col_m2:
-        plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=2)
+        plazo_meses = st.number_input("Plazo estimado (Meses)", min_value=1, value=6)
         st.caption("⏱️ **Frecuencia de Meta Deseada:**")
+        col_freq1, col_freq2 = st.columns(2)
         
-        meta_diaria_manual = input_moneda_con_puntos("Meta Diaria Sugerida (COP $)", "meta_d_live", valor_defecto=0)
-        meta_semanal_manual = input_moneda_con_puntos("Meta Semanal Sugerida (COP $)", "meta_s_live", valor_defecto=0)
+        meta_d_raw = col_freq1.text_input("Meta Diaria Sugerida (COP $)", value="0")
+        meta_diaria_manual = parsear_monto(meta_d_raw)
+        
+        meta_s_raw = col_freq2.text_input("Meta Semanal Sugerida (COP $)", value="0")
+        meta_semanal_manual = parsear_monto(meta_s_raw)
 
     btn_crear_meta = st.button("Guardar Meta de Ahorro", use_container_width=True, type="primary")
     
@@ -526,18 +525,6 @@ with tab_ahorro:
 
     st.divider()
     
-    col_reset_meta, _ = st.columns([2, 2])
-    with col_reset_meta:
-        if st.button("🧹 Limpiar / Reiniciar Metas Corregidas"):
-            for m in datos_user.get("metas", []):
-                m["Actual"] = 0.0
-                m["Objetivo"] = min(m["Objetivo"], 1e9)
-            if "val_num_monto_meta_live" in st.session_state:
-                st.session_state["val_num_monto_meta_live"] = 505000.0
-            guardar_datos()
-            st.success("Se han saneado los saldos de tus metas para corregir valores erróneos.")
-            st.rerun()
-
     st.subheader("Tus Metas Activas")
     if not datos_user["metas"]:
         st.info("No tienes metas registradas actualmente.")
@@ -730,18 +717,23 @@ if es_admin and tab_admin is not None:
             df_sel = pd.DataFrame(datos_sel.get("transacciones", []))
             metas_sel = datos_sel.get("metas", [])
             
-            st.markdown(f"#### 🔍 Auditoría en vivo del usuario: `{usuario_seleccionado}`")
             if not df_sel.empty:
                 u_ingresos = float(df_sel[df_sel['Tipo'] == 'Ingreso']['Monto'].sum())
-                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto')]['Monto'].sum())
+                u_gastos = float(df_sel[(df_sel['Tipo'] == 'Gasto') & (df_sel['Categoría'] != 'Uso Fondo Meta')]['Monto'].sum())
                 u_deudas = float(df_sel[df_sel['Tipo'] == 'Deuda']['Monto'].sum())
+                u_ahorros = float(df_sel[df_sel['Tipo'] == 'Ahorro / Inversión']['Monto'].sum())
+                u_gastos_ahorros = float(df_sel[df_sel['Categoría'] == 'Uso Fondo Meta']['Monto'].sum())
                 
-                aud1, aud2, aud3, aud4 = st.columns(4)
-                aud1.metric("Ingresos", formato_cop(u_ingresos))
-                aud2.metric("Gastos", formato_cop(u_gastos))
-                aud3.metric("Deudas", formato_cop(u_deudas))
-                aud4.metric("Metas Registradas", len(metas_sel))
-                
-                st.dataframe(df_sel, use_container_width=True)
+                u_fondo_ahorro = max(0.0, u_ahorros - u_gastos_ahorros)
+                u_balance = u_ingresos - (u_gastos + u_deudas) - u_fondo_ahorro
             else:
-                st.info("Este usuario no tiene transacciones registradas.")
+                u_ingresos, u_gastos, u_deudas, u_fondo_ahorro, u_balance = 0.0, 0.0, 0.0, 0.0, 0.0
+
+            st.markdown(f"#### 📊 Informe de Cuentas: `{usuario_seleccionado}`")
+            st.info(f"🔑 **Contraseña:** `{datos_sel.get('password')}` | 📞 **Teléfono:** `+57 {datos_sel.get('telefono', 'N/A')}`")
+            
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Ingresos", formato_cop(u_ingresos))
+            m2.metric("Gastos Corrientes", formato_cop(u_gastos + u_deudas))
+            m3.metric("Fondo de Ahorro", formato_cop(u_fondo_ahorro))
+            m4.metric("Balance Libre", formato_cop(u_balance))
